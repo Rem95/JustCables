@@ -100,7 +100,26 @@
         <button class="btn-main" onclick="openForm('Site Survey')">New Site Survey</button>
         <button class="btn-main" onclick="openForm('Job Sheet')">New Job Sheet</button>
         <button class="btn-main" onclick="openForm('Maintenance')">New Maintenance</button>
-        <button style="background:#444; color:white;" onclick="showVault()">Records Vault</button>
+     <button style="background:#444; color:white;" onclick="showVault()">Records Vault</button>
+
+    <div class="grid-2" style="margin-top: 15px;">
+        <button type="button" 
+                style="background: transparent; color: white; border: 1px solid var(--jc-yellow); font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
+                onclick="checkForUpdates()">
+            SYNC UPDATE
+        </button>
+        
+        <button type="button" 
+                style="background: #28a745; color: white; font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
+                onclick="downloadLatestAPK()">
+            DOWNLOAD APK
+        </button>
+    </div>
+
+    <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="logout()">Logout</button>
+
+</div> ```
+        
         
         <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="logout()">Logout</button>
     </div>
@@ -166,18 +185,29 @@
         const DB_KEY = 'justcables_pro_db';
         let canvas, ctx, drawing = false, currentFilter = 'Ongoing';
 
-        // MEMORARE LOGIN (Remember Me)
-        window.onload = function() {
-            const savedUser = localStorage.getItem('jc_user');
-            const savedPass = localStorage.getItem('jc_pass');
-            if(savedUser && savedPass) {
-                document.getElementById('username').value = savedUser;
-                document.getElementById('password').value = savedPass;
-                document.getElementById('rememberMe').checked = true;
-            }
-            initCanvas();
-        };
+      window.onload = function() {
+    // 1. Luăm codul salvat din localStorage
+    const cachedCode = localStorage.getItem('cached_app_code');
+    
+    // 2. Verificăm dacă avem update descărcat și dacă nu suntem deja pe linkul actualizat
+    if (cachedCode && !window.location.search.includes('updated=')) {
+        document.open();
+        document.write(cachedCode);
+        document.close();
+        return; // Oprim execuția fișierului vechi ca să ruleze cel nou
+    }
 
+    // 3. Logica ta existentă de Remember Me (Repusă corect în interiorul funcției)
+    const savedUser = localStorage.getItem('jc_user');
+    const savedPass = localStorage.getItem('jc_pass');
+    if(savedUser && savedPass) {
+        document.getElementById('username').value = savedUser;
+        document.getElementById('password').value = savedPass;
+        document.getElementById('rememberMe').checked = true;
+    }
+    
+    initCanvas();
+};
         function togglePass() {
             const p = document.getElementById('password');
             p.type = p.type === "password" ? "text" : "password";
@@ -389,6 +419,48 @@ function checkForUpdates() {
     } else {
         alert("Updates are only available in Online Mode.");
     }
+}
+function checkForUpdates() {
+    alert("Checking JustCables server for updates...");
+    
+    // URL-ul raw de pe GitHub (asigură-te că numele repo-ului are literele mari/mici corecte)
+    const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html";
+    
+    fetch(updateUrl, { cache: "no-store" })
+        .then(response => {
+            if (!response.ok) throw new Error("Network response was not ok");
+            return response.text();
+        })
+        .then(htmlText => {
+            // Verifică dacă fișierul de pe GitHub are altă versiune scrisă în el (ex: v2.2.0)
+            // Dacă vrei să testezi că merge, schimbă pe GitHub textul în v2.2.0 și lasă pe telefon v2.1.0
+            if (htmlText.includes("v2.1.0")) {
+                alert("You are running the latest version! (v2.1.0)");
+            } else {
+                if (confirm("New updates found! Do you want to apply them now?")) {
+                    localStorage.setItem('cached_app_code', htmlText);
+                    alert("Update downloaded! Restarting application...");
+                    
+                    // Curățăm URL-ul de parametrii vechi și dăm refresh curat
+                    const cleanUrl = window.location.href.split('?')[0];
+                    window.location.href = cleanUrl + "?updated=" + Date.now();
+                }
+            }
+        })
+        .catch(err => {
+            alert("Update check failed. Make sure you are online or check the URL.");
+            console.error(err);
+        });
+}
+
+function downloadLatestAPK() {
+    // Înlocuiește 'Numele_Fisierului.apk' cu numele exact pe care îl are APK-ul tău urcat pe GitHub
+    const apkUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/app-debug.apk";
+    
+    alert("Downloading the latest JustCables APK via GitHub...");
+    
+    // Deschide link-ul în browserul nativ pentru a porni descărcarea
+    window.open(apkUrl, '_system');
 }
     </script>
 </body>
