@@ -4,190 +4,230 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JustCables Enterprise CRM</title>
-<link rel="manifest" href="manifest.json">
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-  }
-</script>
-
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<link rel="manifest" href="manifest.json">
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-  }
-</script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap">
 
     <style>
-        :root { --jc-blue: #0056b3; --main-blue: #5DA9E1; --dark-bg: #1B2E4B; --input-bg: #f4f4f4; --error-red: #ff4d4d; }
-        body { background-color: var(--dark-bg); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 10px; }
-        .app-container { max-width: 600px; margin: 20px auto; padding: 25px; background: rgba(255,255,255,0.05); border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); }
+        :root { 
+            --jc-yellow: #ecc94b; 
+            --jc-blue: #0056b3; 
+            --dark-overlay: rgba(13, 20, 31, 0.9); 
+        }
+
+        body { 
+            font-family: 'Montserrat', sans-serif; 
+            margin: 0; padding: 0; color: white; background-color: #000; 
+            overflow-x: hidden;
+        }
+
+        #bgVideo {
+            position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
+            z-index: -1; object-fit: cover; opacity: 0.5;
+        }
+
+        .app-container { 
+            max-width: 600px; margin: 30px auto; padding: 25px; 
+            background: var(--dark-overlay); border-radius: 15px; 
+            border: 1px solid var(--jc-yellow); backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+
         .hidden { display: none !important; }
-        img.logo { width: 100%; border-radius: 10px; margin-bottom: 15px; border-bottom: 2px solid var(--jc-blue); }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        label { font-size: 0.75rem; color: var(--main-blue); margin-top: 8px; display: block; font-weight: bold; }
-        input, select, textarea { width: 100%; padding: 10px; margin-top: 4px; border-radius: 6px; border: none; background: var(--input-bg); color: #333; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; margin-top: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; text-transform: uppercase; }
-        .btn-main { background-color: var(--jc-blue); color: white; }
-        .tab-btn { flex: 1; padding: 8px; text-align: center; background: rgba(255,255,255,0.1); cursor: pointer; border-radius: 5px; font-size: 0.65rem; font-weight: bold; }
-        .tab-btn.active { background: var(--jc-blue); color: white; border: 1px solid white; }
-        .folder-tabs { display: flex; gap: 4px; margin-top: 10px; flex-wrap: wrap; }
-        .folder-btn { padding: 6px 10px; font-size: 0.6rem; border-radius: 4px; background: rgba(255,255,255,0.05); cursor: pointer; border: 1px solid rgba(255,255,255,0.1); }
-        .folder-btn.active { background: #555; border-color: white; }
-        .record-card { background: rgba(255,255,255,0.08); padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 5px solid var(--main-blue); cursor: pointer; position: relative; }
-        .download-icon { color: var(--main-blue); font-size: 0.7rem; text-decoration: underline; display: block; margin-top: 5px; }
-        .signature-pad { background: white; border-radius: 5px; margin-top: 8px; height: 120px; width: 100%; touch-action: none; border: 1px solid #ccc; }
-        .error-msg { color: var(--error-red); font-size: 0.8rem; margin-top: 10px; text-align: center; font-weight: bold; display: none; }
-        .checkbox-container { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 0.85rem; color: #ccc; cursor: pointer; }
-        .checkbox-container input { width: auto; margin: 0; }
+
+        label { font-size: 0.75rem; color: var(--jc-yellow); margin-top: 12px; display: block; font-weight: bold; text-transform: uppercase; }
+        
+        input, select, textarea { 
+            width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: none; 
+            background: rgba(255, 255, 255, 0.9); color: #222; box-sizing: border-box; font-weight: 600;
+        }
+
+        button { 
+            width: 100%; padding: 14px; margin-top: 15px; border-radius: 10px; border: none; 
+            font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.3s;
+        }
+        
+        .btn-main { background-color: var(--jc-yellow); color: #000; letter-spacing: 1px; }
+        .btn-sync { background-color: #28a745; color: white; margin-bottom: 10px; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+        .tab-btn { flex: 1; padding: 10px; text-align: center; background: rgba(255,255,255,0.1); cursor: pointer; border-radius: 8px; font-size: 0.7rem; }
+        .tab-btn.active { background: var(--jc-yellow); color: #000; font-weight: bold; }
+
+        .record-card { 
+            background: rgba(255,255,255,0.08); padding: 15px; border-radius: 10px; 
+            margin-bottom: 10px; border-left: 5px solid var(--jc-yellow);
+        }
+
+        canvas { background: white; border-radius: 8px; margin-top: 10px; width: 100%; height: 150px; touch-action: none; }
+
+        footer { text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,0,0,0.8); border-top: 1px solid var(--jc-yellow); font-size: 12px; }
     </style>
 </head>
 <body>
 
-    <div id="loginSection" class="app-container">
-        <img src="justcablesimage.jpeg" class="logo">
-        <h2 style="text-align:center; color:var(--main-blue);">System Access</h2>
-        <label>Username</label>
-        <input type="text" id="username" placeholder="Enter Username">
-        <label>Password</label>
-        <input type="password" id="password" placeholder="Enter Password">
-        
-        <label class="checkbox-container">
-            <input type="checkbox" onclick="togglePasswordVisibility()"> Show Password
-        </label>
-        
-        <label class="checkbox-container">
-            <input type="checkbox" id="rememberMe"> Remember Me
-        </label>
+    <video autoplay muted loop playsinline id="bgVideo">
+        <source src="background.mp4" type="video/mp4">
+    </video>
 
-        <div id="loginError" class="error-msg">Invalid Username or Password. Please try again.</div>
+    <div id="loginSection" class="app-container">
+        <img src="icon.png" style="width: 100px; display: block; margin: 0 auto 10px;">
+        <h2 style="text-align:center; color:var(--jc-yellow); letter-spacing: 2px;">SECURE ACCESS</h2>
         
-        <button class="btn-main" onclick="checkLogin()">Login</button>
+        <label>Username</label>
+        <input type="text" id="username" placeholder="JustCables ID">
+        
+        <label>Password</label>
+        <input type="password" id="password" placeholder="••••••••">
+        
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 15px;">
+            <label style="display: flex; align-items: center; gap: 10px; text-transform: none; cursor: pointer;">
+                <input type="checkbox" id="showPass" onclick="togglePass()" style="width: 18px;"> Show Password
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; text-transform: none; cursor: pointer;">
+                <input type="checkbox" id="rememberMe" style="width: 18px;"> Remember Me
+            </label>
+        </div>
+
+        <button class="btn-main" onclick="checkLogin()">Authorize</button>
+        <div id="loginError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold;">Access Denied!</div>
     </div>
 
     <div id="dashboardSection" class="app-container hidden">
-        <img src="justcablesimage.jpeg" class="logo">
+        <h1 style="text-align:center; color:var(--jc-yellow);">JustCables CRM</h1>
+        <button id="syncBtn" class="btn-sync" style="display:none;" onclick="manualSync()">Sync Pending Data</button>
         <button class="btn-main" onclick="openForm('Site Survey')">New Site Survey</button>
         <button class="btn-main" onclick="openForm('Job Sheet')">New Job Sheet</button>
         <button class="btn-main" onclick="openForm('Maintenance')">New Maintenance</button>
-        <button style="background:#6c757d; color:white;" onclick="showVault()">Records Vault</button>
-        <button style="background:transparent; color:white; border:1px solid #ff4d4d; margin-top:20px; opacity:0.7;" onclick="logout()">Logout</button>
+      <button style="background:#444; color:white;" onclick="showVault()">Records Vault</button>
+
+<button type="button" 
+        style="background: transparent; color: white; border: 1px solid var(--jc-yellow); margin-top: 15px; font-size: 0.85rem; letter-spacing: 1px;" 
+        onclick="checkForUpdates()">
+    CHECK FOR UPDATES
+</button>
+
+        
+        
+        <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="logout()">Logout</button>
     </div>
 
     <div id="formSection" class="app-container hidden">
-        <h2 id="formTitle" style="text-align:center; color:var(--main-blue);">Form</h2>
+        <h2 id="formTitle" style="text-align:center; color:var(--jc-yellow);">FORM</h2>
+        
         <div class="grid-2">
             <div><label>Business Name *</label><input type="text" id="bizName"></div>
             <div><label>Client Email *</label><input type="email" id="clientMail"></div>
         </div>
+        
         <div class="grid-2">
-            <div><label>Phone Number *</label><input type="tel" id="phone" placeholder="00353..."></div>
-            <div><label>Work Status</label>
+            <div><label>Contact Person</label><input type="text" id="contactName"></div>
+            <div><label>Phone Number</label><input type="tel" id="phone"></div>
+        </div>
+
+        <div class="grid-2">
+            <div>
+                <label>Work Status</label>
                 <select id="workStatus">
                     <option value="Ongoing">Ongoing</option>
                     <option value="Complete">Complete</option>
-                    <option value="Inactive">Inactive</option>
-                    <option value="Deleted">Deleted</option>
+                    <option value="Invalid">Invalid</option>
                 </select>
             </div>
+            <div><label>Final Price (€)</label><input type="number" id="totalPrice"></div>
         </div>
-        <div class="grid-2">
-            <div><label>Contact Person</label><input type="text" id="contact"></div>
-            <div><label>2nd Engineer?</label><select id="eng2"><option>NO</option><option>YES</option></select></div>
-        </div>
-        <div class="grid-2">
-            <div><label>Base Price (€)</label><input type="number" id="basePrice"></div>
-            <div><label>Extra Price (€)</label><input type="number" id="extraPrice"></div>
-        </div>
-        <div class="grid-2">
-            <div><label>Final Total (€)</label><input type="number" id="finalTotal"></div>
-            <div><label>Duration (h)</label><input type="number" id="duration"></div>
-        </div>
+
         <label>Technical Notes</label>
-        <textarea id="notes" rows="3"></textarea>
-        <label>Photos (Max 10)</label>
-        <input type="file" id="photoInput" accept="image/*" multiple onchange="handlePhotos(event)">
+        <textarea id="notes" rows="4"></textarea>
+
         <label>Customer Signature</label>
-        <canvas id="sig-canvas" class="signature-pad"></canvas>
-        <button class="btn-main" onclick="saveAndProcess()">SAVE & EXPORT PDF</button>
-        <button style="background:transparent; color:white; border:1px solid white;" onclick="location.reload()">Cancel</button>
+        <canvas id="sig-canvas"></canvas>
+        <button type="button" style="background:#333; color:var(--jc-yellow); font-size:0.7rem; padding:8px; margin-top:5px; border:1px solid var(--jc-yellow);" onclick="clearSignature()">Clear Signature</button>
+
+        <div class="grid-2">
+            <button class="btn-main" onclick="saveData()">Save & Export</button>
+            <button style="background:transparent; border:1px solid white; color:white;" onclick="showDashboard()">Back</button>
+        </div>
     </div>
 
     <div id="vaultSection" class="app-container hidden">
-        <h2 style="text-align:center;">Records Vault</h2>
-        <input type="text" id="vaultSearch" placeholder="Search business..." onkeyup="renderVault()" style="margin-bottom:10px;">
-        <div style="display:flex; gap:5px;">
-            <div id="tabSurvey" class="tab-btn active" onclick="switchVault('Site Survey')">Surveys</div>
-            <div id="tabJob" class="tab-btn" onclick="switchVault('Job Sheet')">Job Sheets</div>
-            <div id="tabMaint" class="tab-btn" onclick="switchVault('Maintenance')">Maint</div>
+        <h2 style="text-align:center; color:var(--jc-yellow);">Vault</h2>
+        <div class="grid-2" style="margin-bottom:15px;">
+            <div id="vOngoing" class="tab-btn active" onclick="setVaultFilter('Ongoing')">Ongoing</div>
+            <div id="vComplete" class="tab-btn" onclick="setVaultFilter('Complete')">Complete</div>
+            <div id="vInvalid" class="tab-btn" onclick="setVaultFilter('Invalid')">Invalid</div>
+            <div id="vDeleted" class="tab-btn" onclick="setVaultFilter('Deleted')" style="color:#ff4d4d;">Deleted</div>
         </div>
-        <div class="folder-tabs">
-            <div id="fOngoing" class="folder-btn active" onclick="switchFolder('Ongoing')">Ongoing</div>
-            <div id="fComplete" class="folder-btn" onclick="switchFolder('Complete')">Complete</div>
-            <div id="fInactive" class="folder-btn" onclick="switchFolder('Inactive')">Inactive</div>
-            <div id="fDeleted" class="folder-btn" onclick="switchFolder('Deleted')" style="color:#ff4d4d;">Deleted</div>
-        </div>
-        <div id="recordsList" style="margin-top:15px;"></div>
-        <button class="btn-main" onclick="showDashboard()">Back</button>
+        <div id="vaultList"></div>
+        <button id="purgeBtn" style="background:#dc3545; color:white; display:none;" onclick="purgeDeleted()">Purge All Deleted</button>
+        <button class="btn-main" onclick="showDashboard()">Back to Dashboard</button>
     </div>
+
+    <footer>
+        <p>Managed by <strong>JustCables</strong></p>
+        <p>support@justcables.support</p>
+    </footer>
 
     <script>
         const { jsPDF } = window.jspdf;
-        const DB_KEY = 'justcables_enterprise_final_v17';
-        let canvas, ctx, drawing = false, photos = [], activeTab = 'Site Survey', activeFolder = 'Ongoing';
+        const DB_KEY = 'justcables_pro_db';
+        let canvas, ctx, drawing = false, currentFilter = 'Ongoing';
 
+        // MEMORARE LOGIN (Remember Me)
         window.onload = function() {
-            if(localStorage.getItem('jc_remember') === 'active') showDashboard();
+            const savedUser = localStorage.getItem('jc_user');
+            const savedPass = localStorage.getItem('jc_pass');
+            if(savedUser && savedPass) {
+                document.getElementById('username').value = savedUser;
+                document.getElementById('password').value = savedPass;
+                document.getElementById('rememberMe').checked = true;
+            }
             initCanvas();
         };
 
-        function togglePasswordVisibility() {
-            const passField = document.getElementById("password");
-            passField.type = passField.type === "password" ? "text" : "password";
+        function togglePass() {
+            const p = document.getElementById('password');
+            p.type = p.type === "password" ? "text" : "password";
         }
 
         function checkLogin() {
-            const user = document.getElementById('username').value;
-            const pass = document.getElementById('password').value;
-            const errorDiv = document.getElementById('loginError');
-
-            if(user === "JustCables" && pass === "JustC@bles!") {
-                errorDiv.style.display = "none";
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            if(u === "JustCables" && p === "JustC@bles!") {
                 if(document.getElementById('rememberMe').checked) {
-                    localStorage.setItem('jc_remember', 'active');
+                    localStorage.setItem('jc_user', u);
+                    localStorage.setItem('jc_pass', p);
+                } else {
+                    localStorage.removeItem('jc_user');
+                    localStorage.removeItem('jc_pass');
                 }
                 showDashboard();
             } else {
-                errorDiv.style.display = "block";
+                document.getElementById('loginError').style.display = "block";
             }
         }
 
-        function logout() {
-            localStorage.removeItem('jc_remember');
-            location.reload();
-        }
+        function logout() { location.reload(); }
 
         function showDashboard() {
-            document.querySelectorAll('.app-container').forEach(d=>d.classList.add('hidden'));
+            document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('dashboardSection').classList.remove('hidden');
         }
 
         function openForm(t) {
-            document.querySelectorAll('.app-container').forEach(d=>d.classList.add('hidden'));
+            document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('formSection').classList.remove('hidden');
             document.getElementById('formTitle').innerText = t;
-            initCanvas();
         }
 
+        // SEMNATURA
         function initCanvas() {
             canvas = document.getElementById('sig-canvas'); ctx = canvas.getContext('2d');
-            const getP = (e) => { 
-                const r = canvas.getBoundingClientRect(); 
-                return { 
-                    x: (e.clientX || (e.touches && e.touches[0].clientX)) - r.left, 
-                    y: (e.clientY || (e.touches && e.touches[0].clientY)) - r.top 
-                }; 
+            ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+            const getP = (e) => {
+                const r = canvas.getBoundingClientRect();
+                return { x: (e.clientX || e.touches[0].clientX) - r.left, y: (e.clientY || e.touches[0].clientY) - r.top };
             };
             canvas.onmousedown = (e) => { drawing = true; ctx.beginPath(); const p = getP(e); ctx.moveTo(p.x, p.y); };
             canvas.onmousemove = (e) => { if(drawing) { const p = getP(e); ctx.lineTo(p.x, p.y); ctx.stroke(); } };
@@ -196,85 +236,184 @@
             canvas.ontouchmove = (e) => { if(drawing) { const p = getP(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); } };
         }
 
-        function handlePhotos(e) {
-            photos = []; Array.from(e.target.files).slice(0, 10).forEach(file => {
-                const r = new FileReader(); r.onload = (ev) => photos.push(ev.target.result); r.readAsDataURL(file);
+        function clearSignature() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+        // ==========================================
+// 1. SALVARE DATE & INTENT EMAIL
+// ==========================================
+function saveData() {
+    const biz = document.getElementById('bizName').value;
+    const mail = document.getElementById('clientMail').value;
+    const type = document.getElementById('formTitle').innerText;
+
+    if(!biz || !mail) return alert("Business Name and Email are required!");
+
+    const data = {
+        id: Date.now(), 
+        biz: biz, 
+        mail: mail, 
+        phone: document.getElementById('phone').value,
+        contact: document.getElementById('contactName').value, 
+        status: document.getElementById('workStatus').value,
+        price: document.getElementById('totalPrice').value, 
+        notes: document.getElementById('notes').value,
+        date: new Date().toLocaleString(), 
+        type: type,
+        sig: document.getElementById('sig-canvas').toDataURL()
+    };
+
+    let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+    db.push(data);
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+
+    // Generăm PDF-ul local cu stilul premium
+    generatePDF(data);
+    
+    // Generare Email Profesional structurat curat
+    const subject = encodeURIComponent(`[JustCables Report] ${data.type} - ${data.biz}`);
+    const body = encodeURIComponent(
+        `Dear Customer,\n\n` +
+        `Please find attached the ${data.type} report at ${data.biz}.\n\n` +
+        `SUMMARY:\n` +
+        `- Date: ${data.date}\n` +
+        `- Engineer: Remus Ivasca\n` +
+        `- Work Status: ${data.status}\n` +
+        `- Total Amount: €${data.price}\n\n` +
+        `TECHNICAL NOTES:\n${data.notes || 'No additional notes.'}\n\n` +
+        `If you have any questions, please contact justcables.support \ justcables@outlook.com.\n\n` +
+        `Best regards,\n` +
+        `Remus Ivasca | JustCables\n` +
+        `Dublin, Ireland | 00353 858130081`
+    );
+
+    window.location.href = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
+    showVault();
+}
+
+// ==========================================
+// 2. GENERARE PDF PROFESIONAL (STIL WEBSITE)
+// ==========================================
+function generatePDF(d) {
+    const doc = new jsPDF();
+    
+    // 1. FUNDAL HEADER - Albastru închis JustCables (ca pe webpage)
+    doc.setFillColor(27, 46, 75); // Culoarea #1B2E4B de pe site-ul tău
+    doc.rect(0, 0, 210, 55, 'F');
+
+    // 2. LOGO (Text de tip Logo + Fundal Galben)
+    doc.setTextColor(236, 201, 75); // Galbenul JustCables
+    doc.setFontSize(26);
+    doc.text("JUSTCABLES", 20, 30);
+    doc.setFontSize(10);
+    doc.text("INFRASTRUCTURE & CABLING EXPERT", 20, 38);
+
+    // 3. DATELE TALE DE CONTACT (Automate - Dreapta Sus)
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.text("Remus Ivasca | Lead Engineer", 140, 25);
+    doc.text("JustCables Infrastructure", 140, 30);
+    doc.text("00353 858130081", 140, 35);
+    doc.text("justcables@outlook.com", 140, 40);
+    doc.text("Dublin | Ireland", 140, 45);
+
+    // 4. CORPUL RAPORTULUI
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(16);
+    doc.text(`${d.type.toUpperCase()}`, 20, 70);
+    
+    doc.setDrawColor(236, 201, 75);
+    doc.line(20, 75, 190, 75); // Linie decorativă galbenă
+
+    doc.setFontSize(11);
+    doc.text(`BUSINESS: ${d.biz}`, 20, 85);
+    doc.text(`CONTACT: ${d.contact || 'N/A'}`, 20, 92);
+    doc.text(`EMAIL: ${d.mail}`, 20, 99);
+    doc.text(`DATE: ${d.date}`, 140, 85);
+
+    doc.setFontSize(12);
+    doc.text("TECHNICAL NOTES:", 20, 115);
+    doc.setFontSize(10);
+    doc.text(d.notes || "No notes provided.", 20, 122, {maxWidth: 170});
+
+    // 5. PREȚ ȘI SEMNĂTURĂ
+    doc.setFontSize(14);
+    doc.text(`TOTAL AMOUNT: €${d.price}`, 20, 170);
+
+    if(d.sig) {
+        doc.setFontSize(10);
+        doc.text("Customer Signature:", 20, 190);
+        doc.addImage(d.sig, 'PNG', 20, 195, 60, 25);
+    }
+
+    // Footer discret
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
+
+    doc.save(`${d.biz}_Report.pdf`);
+}
+
+// Asigură-te că dedesubt ai funcțiile de Vault și Update pe care le-am făcut:
+function showVault() {
+    document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
+    document.getElementById('vaultSection').classList.remove('hidden');
+    renderVault();
+}
+
+function setVaultFilter(f) { currentFilter = f; renderVault(); }
+
+function changeStatus(id) {
+    let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+    let r = db.find(x => x.id === id);
+    let next = prompt("New status (Ongoing, Complete, Invalid, Deleted):", r.status);
+    if(next && ["Ongoing", "Complete", "Invalid", "Deleted"].includes(next)) {
+        r.status = next;
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        renderVault();
+    }
+}
+
+function purgeDeleted() {
+    if(confirm("Permanently delete all records in this folder?")) {
+        let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+        db = db.filter(r => r.status !== 'Deleted');
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        renderVault();
+    }
+}
+
+function checkForUpdates() {
+    alert("Checking JustCables Server for updates...");
+    if ('serviceWorker' in navigator) {
+        navigator.getRegistration().then(registration => {
+            if (registration) {
+                registration.update().then(() => {
+                    alert("JustCables is up to date! (v2.1.0)");
+                });
+            } else {
+                alert("Update system initialized. Will sync on next launch.");
+            }
+        });
+    } else {
+        alert("Updates are only available in Online Mode.");
+    }
+}
+function checkForUpdates() {
+    alert("Checking JustCables server for updates...");
+    
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(registration => {
+            // Forțează verificarea fișierelor noi de pe GitHub Pages
+            registration.update().then(() => {
+                alert("JustCables CRM is synchronized with GitHub! (v2.1.0)");
+            }).catch(err => {
+                alert("Could not complete update check. Server offline.");
             });
-        }
-
-        function saveAndProcess() {
-            const biz = document.getElementById('bizName').value, mail = document.getElementById('clientMail').value;
-            if(!biz || !mail) return alert("Business and Email required!");
-
-            const data = {
-                id: Date.now(), type: document.getElementById('formTitle').innerText, biz: biz, mail: mail,
-                phone: document.getElementById('phone').value, status: document.getElementById('workStatus').value,
-                base: document.getElementById('basePrice').value, extra: document.getElementById('extraPrice').value,
-                total: document.getElementById('finalTotal').value, date: new Date().toLocaleDateString(), 
-                notes: document.getElementById('notes').value, sig: canvas.toDataURL()
-            };
-
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            db.push(data); localStorage.setItem(DB_KEY, JSON.stringify(db));
-            
-            generatePDF(data);
-            window.location.href = `mailto:${mail}?subject=${data.type} - ${biz}&body=Report attached.`;
-            showVault();
-        }
-
-        function generatePDF(d) {
-            const doc = new jsPDF();
-            doc.setFillColor(0, 86, 179); doc.rect(0,0,210,40,'F');
-            doc.setFontSize(22); doc.setTextColor(255); doc.text("JustCables", 20, 20);
-            doc.setFontSize(10); doc.text("Infrastructure & Cable Expert", 20, 28);
-            doc.setTextColor(0); doc.text(`BUSINESS: ${d.biz}`, 20, 55);
-            doc.text(`DATE: ${d.date} | TOTAL: €${d.total} | STATUS: ${d.status}`, 20, 62);
-            doc.text("NOTES:", 20, 80); doc.text(d.notes || "N/A", 20, 85, {maxWidth:170});
-            if(d.sig) doc.addImage(d.sig, 'PNG', 20, 260, 40, 15);
-            doc.save(`${d.type}_${d.biz}.pdf`);
-        }
-
-        function showVault() { document.querySelectorAll('.app-container').forEach(d=>d.classList.add('hidden')); document.getElementById('vaultSection').classList.remove('hidden'); renderVault(); }
-        function switchVault(t) { activeTab = t; renderVault(); }
-        function switchFolder(f) { activeFolder = f; renderVault(); }
-
-        function renderVault() {
-            const query = document.getElementById('vaultSearch').value.toLowerCase();
-            const list = document.getElementById('recordsList');
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-
-            document.querySelectorAll('.tab-btn, .folder-btn').forEach(b => b.classList.remove('active'));
-            if(activeTab === 'Site Survey') document.getElementById('tabSurvey').classList.add('active');
-            if(activeTab === 'Job Sheet') document.getElementById('tabJob').classList.add('active');
-            if(activeTab === 'Maintenance') document.getElementById('tabMaint').classList.add('active');
-            document.getElementById('f'+activeFolder).classList.add('active');
-
-            let filtered = db.filter(r => r.type === activeTab && r.status === activeFolder && r.biz.toLowerCase().includes(query)).reverse();
-            list.innerHTML = filtered.map(r => `
-                <div class="record-card">
-                    <strong>${r.biz}</strong><br><small>${r.date} | €${r.total}</small>
-                    <span class="download-icon" onclick="reDownload('${r.id}')">Redownload PDF</span>
-                    <button style="margin-top:5px; padding:5px; font-size:0.6rem; background:var(--main-blue);" onclick="changeStatus('${r.id}')">Change Status</button>
-                </div>
-            `).join('') || "<p style='text-align:center; opacity:0.5;'>Empty folder.</p>";
-        }
-
-        function changeStatus(id) {
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            let rec = db.find(r => r.id == id);
-            let newStatus = prompt("Enter new status (Ongoing, Complete, Inactive, Deleted):", rec.status);
-            if(newStatus && ["Ongoing", "Complete", "Inactive", "Deleted"].includes(newStatus)) {
-                rec.status = newStatus;
-                localStorage.setItem(DB_KEY, JSON.stringify(db));
-                renderVault();
-            } else { alert("Invalid status."); }
-        }
-
-        function reDownload(id) {
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            let rec = db.find(r => r.id == id);
-            if(rec) generatePDF(rec);
-        }
+        });
+    } else {
+        alert("Updates are only supported in online app mode.");
+    }
+}
     </script>
 </body>
 </html>
