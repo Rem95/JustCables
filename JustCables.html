@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JustCables CRM - Professional Multi-Vault</title>
+    <style>
+        :root { --main-blue: #5DA9E1; --dark-bg: #1B2E4B; --input-bg: #f4f4f4; --success-green: #28a745; --maint-orange: #f39c12; }
+        body { background-color: var(--dark-bg); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 10px; }
+        .app-container { max-width: 600px; margin: 20px auto; padding: 25px; background: rgba(255,255,255,0.05); border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .hidden { display: none !important; }
+        img.logo { width: 100%; border-radius: 10px; margin-bottom: 20px; }
+        h2 { color: var(--main-blue); text-align: center; text-transform: uppercase; letter-spacing: 2px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        label { font-size: 0.8rem; color: var(--main-blue); margin-top: 10px; display: block; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 12px; margin-top: 5px; border-radius: 6px; border: none; background: var(--input-bg); color: #333; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; margin-top: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; text-transform: uppercase; }
+        .btn-main { background-color: var(--main-blue); color: white; }
+        .btn-secondary { background-color: #3A5A82; color: white; }
+        
+        /* Records Vault UI */
+        .tabs-header { display: flex; gap: 5px; margin-bottom: 15px; }
+        .tab-btn { flex: 1; padding: 12px; text-align: center; background: rgba(255,255,255,0.1); cursor: pointer; border-radius: 5px; font-size: 0.75rem; font-weight: bold; color: #ccc; }
+        .tab-btn.active { background: var(--main-blue); color: white; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 1px solid white; }
+        .record-card { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 5px solid var(--main-blue); cursor: pointer; position: relative; }
+        .record-card:hover { background: rgba(255,255,255,0.15); }
+        .record-card strong { color: var(--main-blue); font-size: 1.1rem; }
+        .date-badge { float: right; font-size: 0.7rem; opacity: 0.6; }
+
+        .signature-pad { background: white; border-radius: 5px; margin-top: 10px; height: 150px; width: 100%; touch-action: none; border: 1px solid #ccc; }
+        .gallery-preview { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+        .gallery-preview img { width: 100%; height: 80px; object-fit: cover; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="loginSection" class="app-container">
+        <img src="justcablesimage.jpeg" class="logo">
+        <h2>Engineer Access</h2>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <div style="margin-top:10px;"><input type="checkbox" id="rememberMe"> <label style="display:inline; color:white;">Remember Me</label></div>
+        <button class="btn-main" onclick="checkLogin()">Login</button>
+    </div>
+
+    <div id="dashboardSection" class="app-container hidden">
+        <img src="justcablesimage.jpeg" class="logo">
+        <h2>Dashboard</h2>
+        <button class="btn-main" onclick="openNewForm('Site Survey')">New Site Survey</button>
+        <button class="btn-main" style="background-color: var(--success-green);" onclick="openNewForm('Job Sheet')">New Job Sheet</button>
+        <button class="btn-main" style="background-color: var(--maint-orange);" onclick="openNewForm('Maintenance')">New Maintenance</button>
+        <hr style="border: 0.5px solid rgba(255,255,255,0.1); margin: 20px 0;">
+        <button class="btn-secondary" onclick="showVault()">Records Vault (Search)</button>
+        <button class="btn-secondary" style="opacity:0.7" onclick="logout()">Logout</button>
+    </div>
+
+    <div id="formSection" class="app-container hidden">
+        <h2 id="formTitle">Form</h2>
+        <div class="grid-2">
+            <div><label>Contact Person</label><input type="text" id="clientName"></div>
+            <div><label>Technician</label><input type="text" id="techName" value="Remus Ivasca" readonly></div>
+        </div>
+        <div class="grid-2">
+            <div><label>Client Email *</label><input type="email" id="clientEmail"></div>
+            <div><label>Business Name *</label><input type="text" id="businessName"></div>
+        </div>
+        <div class="grid-2">
+            <div><label>IT Infrastructure?</label><select id="itAccess"><option value="NO">NO</option><option value="YES">YES</option></select></div>
+            <div><label>2nd Engineer?</label><select id="secondEng"><option value="NO">NO</option><option value="YES">YES</option></select></div>
+        </div>
+        <div class="grid-2">
+            <div><label>Duration (Hours)</label><input type="number" id="duration"></div>
+            <div><label>Price Estimate (€)</label><input type="number" id="price"></div>
+        </div>
+        <label>Photos / Gallery</label>
+        <input type="file" id="photoInput" accept="image/*" multiple onchange="handlePhotos(event)">
+        <div id="galleryPreview" class="gallery-preview"></div>
+        <label>Technical Comments</label>
+        <textarea id="comments" rows="3"></textarea>
+        <label>Signature</label>
+        <canvas id="sig-canvas" class="signature-pad"></canvas>
+        <button class="btn-main" onclick="saveData()">SAVE & PREPARE EMAIL</button>
+        <button class="btn-secondary" onclick="showDashboard()">Cancel</button>
+    </div>
+
+    <div id="vaultSection" class="app-container hidden">
+        <h2>Records Vault</h2>
+        <input type="text" id="searchInput" style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px;" placeholder="Search Business or Contact..." onkeyup="filterVault()">
+        <div class="tabs-header">
+            <div id="tabSurvey" class="tab-btn active" onclick="switchVault('Site Survey')">SURVEYS</div>
+            <div id="tabJob" class="tab-btn" onclick="switchVault('Job Sheet')">JOB SHEETS</div>
+            <div id="tabMaint" class="tab-btn" onclick="switchVault('Maintenance')">MAINTENANCE</div>
+        </div>
+        <div id="recordsList"></div>
+        <button class="btn-secondary" onclick="showDashboard()">Back to Dashboard</button>
+    </div>
+
+    <script>
+        const DB_KEY = 'justcables_final_storage_v6';
+        let canvas, ctx, drawing = false;
+        let activeVaultTab = 'Site Survey';
+        let currentPhotos = [];
+
+        window.onload = function() {
+            if(localStorage.getItem('jc_remember') === 'active') showDashboard();
+            initCanvas();
+        };
+
+        function checkLogin() {
+            if(document.getElementById('username').value === "JustCables" && document.getElementById('password').value === "JustC@bles!") {
+                if(document.getElementById('rememberMe').checked) localStorage.setItem('jc_remember', 'active');
+                showDashboard();
+            }
+        }
+
+        function logout() { localStorage.removeItem('jc_remember'); location.reload(); }
+
+        function showDashboard() {
+            document.querySelectorAll('.app-container').forEach(d => d.classList.add('hidden'));
+            document.getElementById('dashboardSection').classList.remove('hidden');
+        }
+
+        function openNewForm(type) {
+            document.querySelectorAll('.app-container').forEach(d => d.classList.add('hidden'));
+            document.getElementById('formSection').classList.remove('hidden');
+            document.getElementById('formTitle').innerText = type;
+            // Clear fields
+            document.getElementById('clientName').value = "";
+            document.getElementById('businessName').value = "";
+            document.getElementById('clientEmail').value = "";
+            document.getElementById('duration').value = "";
+            document.getElementById('price').value = "";
+            document.getElementById('comments').value = "";
+            document.getElementById('galleryPreview').innerHTML = "";
+            currentPhotos = [];
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function initCanvas() {
+            canvas = document.getElementById('sig-canvas');
+            ctx = canvas.getContext('2d');
+            const getPos = (e) => {
+                let rect = canvas.getBoundingClientRect();
+                let clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                let clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                return { x: clientX - rect.left, y: clientY - rect.top };
+            };
+            const start = (e) => { drawing = true; ctx.beginPath(); let p = getPos(e); ctx.moveTo(p.x, p.y); };
+            const move = (e) => { if(drawing) { let p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); } };
+            canvas.onmousedown = start; canvas.onmousemove = move; window.onmouseup = () => drawing = false;
+            canvas.ontouchstart = start; canvas.ontouchmove = move; canvas.ontouchend = () => drawing = false;
+        }
+
+        function handlePhotos(e) {
+            const files = e.target.files;
+            for(let file of files) {
+                let r = new FileReader();
+                r.onload = (ev) => { currentPhotos.push(ev.target.result); renderGallery(); };
+                r.readAsDataURL(file);
+            }
+        }
+
+        function renderGallery() {
+            document.getElementById('galleryPreview').innerHTML = currentPhotos.map(s => `<img src="${s}">`).join('');
+        }
+
+        function saveData() {
+            const biz = document.getElementById('businessName').value;
+            const mail = document.getElementById('clientEmail').value;
+            const type = document.getElementById('formTitle').innerText;
+            if(!biz || !mail) return alert("Business Name and Email are required!");
+
+            const record = {
+                id: Date.now(),
+                type: type,
+                business: biz,
+                client: document.getElementById('clientName').value,
+                date: new Date().toLocaleDateString(),
+                it: document.getElementById('itAccess').value,
+                eng: document.getElementById('secondEng').value,
+                price: document.getElementById('price').value,
+                duration: document.getElementById('duration').value,
+                notes: document.getElementById('comments').value
+            };
+
+            // Critical Fix: Save text data first
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            db.push(record);
+            
+            try {
+                localStorage.setItem(DB_KEY, JSON.stringify(db));
+            } catch (e) {
+                alert("Storage full! Record saved without some details.");
+            }
+
+            // Prepare Email
+            const subject = encodeURIComponent(`${type}: ${biz}`);
+            const body = encodeURIComponent(`JUSTCABLES REPORT\n\nType: ${type}\nBusiness: ${biz}\nContact: ${record.client}\nIT Access: ${record.it}\n2nd Engineer: ${record.eng}\nDuration: ${record.duration}h\nPrice: €${record.price}\n\nNotes: ${record.notes}`);
+            window.location.href = `mailto:${mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
+
+            alert("SUCCESS! Record visible in " + type + " Vault.");
+            activeVaultTab = type; // Auto-switch to the saved type
+            showVault();
+        }
+
+        function showVault() {
+            document.querySelectorAll('.app-container').forEach(d => d.classList.add('hidden'));
+            document.getElementById('vaultSection').classList.remove('hidden');
+            switchVault(activeVaultTab);
+        }
+
+        function switchVault(type) {
+            activeVaultTab = type;
+            document.getElementById('tabSurvey').classList.toggle('active', type === 'Site Survey');
+            document.getElementById('tabJob').classList.toggle('active', type === 'Job Sheet');
+            document.getElementById('tabMaint').classList.toggle('active', type === 'Maintenance');
+            filterVault();
+        }
+
+        function filterVault() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const list = document.getElementById('recordsList');
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            
+            db.sort((a,b) => b.id - a.id);
+            const filtered = db.filter(r => r.type === activeVaultTab && 
+                (r.business.toLowerCase().includes(query) || r.client.toLowerCase().includes(query)));
+
+            list.innerHTML = filtered.map(r => `
+                <div class="record-card" onclick="alert('Client: ${r.client}\\nDate: ${r.date}\\nNotes: ${r.notes}')">
+                    <span class="date-badge">${r.date}</span>
+                    <strong>${r.business}</strong><br>
+                    <small>Contact: ${r.client}</small>
+                </div>
+            `).join('') || `<p style='text-align:center; opacity:0.5;'>No records found in ${activeVaultTab}.</p>`;
+        }
+    </script>
+</body>
+</html>
