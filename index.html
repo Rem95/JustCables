@@ -454,12 +454,10 @@ function checkForUpdates() {
 }
 
 function downloadLatestAPK() {
-    // Înlocuiește 'Numele_Fisierului.apk' cu numele exact pe care îl are APK-ul tău urcat pe GitHub
-    const apkUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/app-debug.apk";
+    // Ăsta este linkul tău cel nou din Releases, care este 100% activ:
+    const apkUrl = "https://github.com/Rem95/JustCables/releases/download/v2.1.0/app-debug.apk";
     
     alert("Downloading the latest JustCables APK via GitHub...");
-    
-    // Deschide link-ul în browserul nativ pentru a porni descărcarea
     window.open(apkUrl, '_system');
 }
     </script>
