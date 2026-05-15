@@ -100,27 +100,22 @@
         <button class="btn-main" onclick="openForm('Site Survey')">New Site Survey</button>
         <button class="btn-main" onclick="openForm('Job Sheet')">New Job Sheet</button>
         <button class="btn-main" onclick="openForm('Maintenance')">New Maintenance</button>
-     <button style="background:#444; color:white;" onclick="showVault()">Records Vault</button>
+        <button style="background:#444; color:white;" onclick="showVault()">Records Vault</button>
 
-    <div class="grid-2" style="margin-top: 15px;">
-        <button type="button" 
-                style="background: transparent; color: white; border: 1px solid var(--jc-yellow); font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
-                onclick="checkForUpdates()">
-            SYNC UPDATE
-        </button>
-        
-        <button type="button" 
-                style="background: #28a745; color: white; font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
-                onclick="downloadLatestAPK()">
-            DOWNLOAD APK
-        </button>
-    </div>
+        <div class="grid-2" style="margin-top: 15px;">
+            <button type="button" 
+                    style="background: transparent; color: white; border: 1px solid var(--jc-yellow); font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
+                    onclick="checkForUpdates()">
+                SYNC UPDATE
+            </button>
+            
+            <button type="button" 
+                    style="background: #28a745; color: white; font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
+                    onclick="downloadLatestAPK()">
+                DOWNLOAD APK
+            </button>
+        </div>
 
-    <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="logout()">Logout</button>
-
-</div> ```
-        
-        
         <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="logout()">Logout</button>
     </div>
 
@@ -146,16 +141,15 @@
                     <option value="Invalid">Invalid</option>
                 </select>
             </div>
-            <div><label>Estimated Price (€)</label><input type="number" id="totalPrice"></div>
-        </div>
-</div>
             <div><label>Final Price (€)</label><input type="number" id="totalPrice"></div>
         </div>
+
         <label>Technical Notes</label>
         <textarea id="notes" rows="4"></textarea>
+        
         <label>ATTACH IMAGES / TAKE PHOTOS</label>
-<input type="file" id="jobSheetPhotos" accept="image/*" multiple style="background:#fff; color:#000; padding:10px; margin-bottom:15px; border-radius:5px; width:100%;">
-<div id="jobSheetPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;"></div>
+        <input type="file" id="jobSheetPhotos" accept="image/*" multiple style="background:#fff; color:#000; padding:10px; margin-bottom:15px; border-radius:5px; width:100%;">
+        <div id="jobSheetPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;"></div>
 
         <label>Customer Signature</label>
         <canvas id="sig-canvas"></canvas>
@@ -190,29 +184,28 @@
         const DB_KEY = 'justcables_pro_db';
         let canvas, ctx, drawing = false, currentFilter = 'Ongoing';
 
-      window.onload = function() {
-    // 1. Luăm codul salvat din localStorage
-    const cachedCode = localStorage.getItem('cached_app_code');
-    
-    // 2. Verificăm dacă avem update descărcat și dacă nu suntem deja pe linkul actualizat
-    if (cachedCode && !window.location.search.includes('updated=')) {
-        document.open();
-        document.write(cachedCode);
-        document.close();
-        return; // Oprim execuția fișierului vechi ca să ruleze cel nou
-    }
+        window.onload = function() {
+            const cachedCode = localStorage.getItem('cached_app_code');
+            
+            if (cachedCode && !window.location.search.includes('updated=')) {
+                document.open();
+                document.write(cachedCode);
+                document.close();
+                return;
+            }
 
-    // 3. Logica ta existentă de Remember Me (Repusă corect în interiorul funcției)
-    const savedUser = localStorage.getItem('jc_user');
-    const savedPass = localStorage.getItem('jc_pass');
-    if(savedUser && savedPass) {
-        document.getElementById('username').value = savedUser;
-        document.getElementById('password').value = savedPass;
-        document.getElementById('rememberMe').checked = true;
-    }
-    
-    initCanvas();
-};
+            const savedUser = localStorage.getItem('jc_user');
+            const savedPass = localStorage.getItem('jc_pass');
+            if(savedUser && savedPass) {
+                document.getElementById('username').value = savedUser;
+                document.getElementById('password').value = savedPass;
+                document.getElementById('rememberMe').checked = true;
+            }
+            
+            initCanvas();
+            setupPhotoPreview('jobSheetPhotos', 'jobSheetPreview');
+        };
+
         function togglePass() {
             const p = document.getElementById('password');
             p.type = p.type === "password" ? "text" : "password";
@@ -243,12 +236,12 @@
         }
 
         function openForm(t) {
+            clearFormFields();
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('formSection').classList.remove('hidden');
             document.getElementById('formTitle').innerText = t;
         }
 
-        // SEMNATURA
         function initCanvas() {
             canvas = document.getElementById('sig-canvas'); ctx = canvas.getContext('2d');
             ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
@@ -265,206 +258,261 @@
 
         function clearSignature() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
 
-        // ==========================================
-// 1. SALVARE DATE & INTENT EMAIL
-// ==========================================
-function saveData() {
-    const biz = document.getElementById('bizName').value;
-    const mail = document.getElementById('clientMail').value;
-    const type = document.getElementById('formTitle').innerText;
+        function setupPhotoPreview(inputId, previewId) {
+            const input = document.getElementById(inputId);
+            const preview = document.getElementById(previewId);
+            if (!input || !preview) return;
 
-    if(!biz || !mail) return alert("Business Name and Email are required!");
-
-    const data = {
-        id: Date.now(), 
-        biz: biz, 
-        mail: mail, 
-        phone: document.getElementById('phone').value,
-        contact: document.getElementById('contactName').value, 
-        status: document.getElementById('workStatus').value,
-        price: document.getElementById('totalPrice').value, 
-        notes: document.getElementById('notes').value,
-        date: new Date().toLocaleString(), 
-        type: type,
-        sig: document.getElementById('sig-canvas').toDataURL()
-    };
-
-    let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-    db.push(data);
-    localStorage.setItem(DB_KEY, JSON.stringify(db));
-
-    // Generăm PDF-ul local cu stilul premium
-    generatePDF(data);
-    
-    // Generare Email Profesional structurat curat
-    const subject = encodeURIComponent(`[JustCables Report] ${data.type} - ${data.biz}`);
-    const body = encodeURIComponent(
-        `Dear Customer,\n\n` +
-        `Please find attached the ${data.type} report at ${data.biz}.\n\n` +
-        `SUMMARY:\n` +
-        `- Date: ${data.date}\n` +
-        `- Engineer: Remus Ivasca\n` +
-        `- Work Status: ${data.status}\n` +
-        `- Total Amount: €${data.price}\n\n` +
-        `TECHNICAL NOTES:\n${data.notes || 'No additional notes.'}\n\n` +
-        `If you have any questions, please contact justcables.support \ justcables@outlook.com.\n\n` +
-        `Best regards,\n` +
-        `Remus Ivasca | JustCables\n` +
-        `Dublin, Ireland | 00353 858130081`
-    );
-
-    window.location.href = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
-    showVault();
-}
-
-// ==========================================
-// 2. GENERARE PDF PROFESIONAL (STIL WEBSITE)
-// ==========================================
-function generatePDF(d) {
-    const doc = new jsPDF();
-    
-    // 1. FUNDAL HEADER - Albastru închis JustCables (ca pe webpage)
-    doc.setFillColor(27, 46, 75); // Culoarea #1B2E4B de pe site-ul tău
-    doc.rect(0, 0, 210, 55, 'F');
-
-    // 2. LOGO (Text de tip Logo + Fundal Galben)
-    doc.setTextColor(236, 201, 75); // Galbenul JustCables
-    doc.setFontSize(26);
-    doc.text("JUSTCABLES", 20, 30);
-    doc.setFontSize(10);
-    doc.text("INFRASTRUCTURE & CABLING EXPERT", 20, 38);
-
-    // 3. DATELE TALE DE CONTACT (Automate - Dreapta Sus)
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(9);
-    doc.text("Remus Ivasca | Lead Engineer", 140, 25);
-    doc.text("JustCables Infrastructure", 140, 30);
-    doc.text("00353 858130081", 140, 35);
-    doc.text("justcables@outlook.com", 140, 40);
-    doc.text("Dublin | Ireland", 140, 45);
-
-    // 4. CORPUL RAPORTULUI
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(16);
-    doc.text(`${d.type.toUpperCase()}`, 20, 70);
-    
-    doc.setDrawColor(236, 201, 75);
-    doc.line(20, 75, 190, 75); // Linie decorativă galbenă
-
-    doc.setFontSize(11);
-    doc.text(`BUSINESS: ${d.biz}`, 20, 85);
-    doc.text(`CONTACT: ${d.contact || 'N/A'}`, 20, 92);
-    doc.text(`EMAIL: ${d.mail}`, 20, 99);
-    doc.text(`DATE: ${d.date}`, 140, 85);
-
-    doc.setFontSize(12);
-    doc.text("TECHNICAL NOTES:", 20, 115);
-    doc.setFontSize(10);
-    doc.text(d.notes || "No notes provided.", 20, 122, {maxWidth: 170});
-
-    // 5. PREȚ ȘI SEMNĂTURĂ
-    doc.setFontSize(14);
-    doc.text(`TOTAL AMOUNT: €${d.price}`, 20, 170);
-
-    if(d.sig) {
-        doc.setFontSize(10);
-        doc.text("Customer Signature:", 20, 190);
-        doc.addImage(d.sig, 'PNG', 20, 195, 60, 25);
-    }
-
-    // Footer discret
-    doc.setFontSize(8);
-    doc.setTextColor(150);
-    doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
-
-    doc.save(`${d.biz}_Report.pdf`);
-}
-
-// Asigură-te că dedesubt ai funcțiile de Vault și Update pe care le-am făcut:
-function showVault() {
-    document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
-    document.getElementById('vaultSection').classList.remove('hidden');
-    renderVault();
-}
-
-function setVaultFilter(f) { currentFilter = f; renderVault(); }
-
-function changeStatus(id) {
-    let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-    let r = db.find(x => x.id === id);
-    let next = prompt("New status (Ongoing, Complete, Invalid, Deleted):", r.status);
-    if(next && ["Ongoing", "Complete", "Invalid", "Deleted"].includes(next)) {
-        r.status = next;
-        localStorage.setItem(DB_KEY, JSON.stringify(db));
-        renderVault();
-    }
-}
-
-function purgeDeleted() {
-    if(confirm("Permanently delete all records in this folder?")) {
-        let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-        db = db.filter(r => r.status !== 'Deleted');
-        localStorage.setItem(DB_KEY, JSON.stringify(db));
-        renderVault();
-    }
-}
-
-function checkForUpdates() {
-    alert("Checking JustCables Server for updates...");
-    if ('serviceWorker' in navigator) {
-        navigator.getRegistration().then(registration => {
-            if (registration) {
-                registration.update().then(() => {
-                    alert("JustCables is up to date! (v2.1.0)");
-                });
-            } else {
-                alert("Update system initialized. Will sync on next launch.");
-            }
-        });
-    } else {
-        alert("Updates are only available in Online Mode.");
-    }
-}
-function checkForUpdates() {
-    alert("Checking JustCables server for updates...");
-    
-    // URL-ul raw de pe GitHub (asigură-te că numele repo-ului are literele mari/mici corecte)
-    const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html";
-    
-    fetch(updateUrl, { cache: "no-store" })
-        .then(response => {
-            if (!response.ok) throw new Error("Network response was not ok");
-            return response.text();
-        })
-        .then(htmlText => {
-            // Verifică dacă fișierul de pe GitHub are altă versiune scrisă în el (ex: v2.2.0)
-            // Dacă vrei să testezi că merge, schimbă pe GitHub textul în v2.2.0 și lasă pe telefon v2.1.0
-            if (htmlText.includes("v2.1.0")) {
-                alert("You are running the latest version! (v2.1.0)");
-            } else {
-                if (confirm("New updates found! Do you want to apply them now?")) {
-                    localStorage.setItem('cached_app_code', htmlText);
-                    alert("Update downloaded! Restarting application...");
-                    
-                    // Curățăm URL-ul de parametrii vechi și dăm refresh curat
-                    const cleanUrl = window.location.href.split('?')[0];
-                    window.location.href = cleanUrl + "?updated=" + Date.now();
+            input.addEventListener('change', function() {
+                preview.innerHTML = ''; 
+                if (this.files) {
+                    Array.from(this.files).forEach(file => {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            const img = document.createElement('img');
+                            img.src = e.target.result;
+                            img.style.width = '70px';
+                            img.style.height = '70px';
+                            img.style.objectFit = 'cover';
+                            img.style.borderRadius = '5px';
+                            img.style.border = '1px solid var(--jc-yellow)';
+                            preview.appendChild(img);
+                        }
+                        reader.readAsDataURL(file);
+                    });
                 }
-            }
-        })
-        .catch(err => {
-            alert("Update check failed. Make sure you are online or check the URL.");
-            console.error(err);
-        });
-}
+            });
+        }
 
-function downloadLatestAPK() {
-    // Ăsta este linkul tău cel nou din Releases, care este 100% activ:
-    const apkUrl = "https://github.com/Rem95/JustCables/releases/download/v2.1.0/app-debug.apk";
-    
-    alert("Downloading the latest JustCables APK via GitHub...");
-    window.open(apkUrl, '_system');
-}
+        // ==========================================
+        // 1. SALVARE DATE & INTENT EMAIL
+        // ==========================================
+        function saveData() {
+            const biz = document.getElementById('bizName').value;
+            const mail = document.getElementById('clientMail').value;
+            const type = document.getElementById('formTitle').innerText;
+
+            if(!biz || !mail) return alert("Business Name and Email are required!");
+
+            const data = {
+                id: Date.now(), 
+                biz: biz, 
+                mail: mail, 
+                phone: document.getElementById('phone').value,
+                contact: document.getElementById('contactName').value, 
+                status: document.getElementById('workStatus').value,
+                price: document.getElementById('totalPrice').value, 
+                notes: document.getElementById('notes').value,
+                date: new Date().toLocaleString(), 
+                type: type,
+                sig: document.getElementById('sig-canvas').toDataURL()
+            };
+
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            db.push(data);
+            localStorage.setItem(DB_KEY, JSON.stringify(db));
+
+            generatePDF(data);
+            
+            const subject = encodeURIComponent(`[JustCables Report] ${data.type} - ${data.biz}`);
+            const body = encodeURIComponent(
+                `Dear Customer,\n\n` +
+                `Please find attached the ${data.type} report at ${data.biz}.\n\n` +
+                `SUMMARY:\n` +
+                `- Date: ${data.date}\n` +
+                `- Engineer: Remus Ivasca\n` +
+                `- Work Status: ${data.status}\n` +
+                `- Total Amount: €${data.price}\n\n` +
+                `TECHNICAL NOTES:\n${data.notes || 'No additional notes.'}\n\n` +
+                `If you have any questions, please contact justcables.support / justcables@outlook.com.\n\n` +
+                `Best regards,\n` +
+                `Remus Ivasca | JustCables\n` +
+                `Dublin, Ireland | 00353 858130081`
+            );
+
+            window.location.href = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
+            showVault();
+        }
+
+        // ==========================================
+        // 2. GENERARE PDF PROFESIONAL (STIL WEBSITE)
+        // ==========================================
+        function generatePDF(d) {
+            const doc = new jsPDF();
+            
+            doc.setFillColor(27, 46, 75); 
+            doc.rect(0, 0, 210, 55, 'F');
+
+            doc.setTextColor(236, 201, 75); 
+            doc.setFontSize(26);
+            doc.text("JUSTCABLES", 20, 30);
+            doc.setFontSize(10);
+            doc.text("INFRASTRUCTURE & CABLING EXPERT", 20, 38);
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(9);
+            doc.text("Remus Ivasca | Lead Engineer", 140, 25);
+            doc.text("JustCables Infrastructure", 140, 30);
+            doc.text("00353 858130081", 140, 35);
+            doc.text("justcables@outlook.com", 140, 40);
+            doc.text("Dublin | Ireland", 140, 45);
+
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(16);
+            doc.text(`${d.type.toUpperCase()}`, 20, 70);
+            
+            doc.setDrawColor(236, 201, 75);
+            doc.line(20, 75, 190, 75); 
+
+            doc.setFontSize(11);
+            doc.text(`BUSINESS: ${d.biz}`, 20, 85);
+            doc.text(`CONTACT: ${d.contact || 'N/A'}`, 20, 92);
+            doc.text(`EMAIL: ${d.mail}`, 20, 99);
+            doc.text(`DATE: ${d.date}`, 140, 85);
+
+            doc.setFontSize(12);
+            doc.text("TECHNICAL NOTES:", 20, 115);
+            doc.setFontSize(10);
+            doc.text(d.notes || "No notes provided.", 20, 122, {maxWidth: 170});
+
+            doc.setFontSize(14);
+            doc.text(`TOTAL AMOUNT: €${d.price}`, 20, 170);
+
+            if(d.sig) {
+                doc.setFontSize(10);
+                doc.text("Customer Signature:", 20, 190);
+                doc.addImage(d.sig, 'PNG', 20, 195, 60, 25);
+            }
+
+            const images = document.querySelectorAll('#jobSheetPreview img');
+            if (images.length > 0) {
+                doc.addPage(); 
+                doc.setFontSize(14);
+                doc.setTextColor(27, 46, 75);
+                doc.text("ATTACHED IMAGES / FIELD EVIDENCE", 20, 20);
+                
+                doc.setDrawColor(236, 201, 75);
+                doc.line(20, 23, 190, 23);
+                
+                let xOffset = 20;
+                let yOffset = 30;
+                
+                images.forEach((img, index) => {
+                    doc.addImage(img.src, 'JPEG', xOffset, yOffset, 50, 50);
+                    xOffset += 55; 
+                    
+                    if ((index + 1) % 3 === 0) {
+                        xOffset = 20;
+                        yOffset += 55;
+                    }
+                    
+                    if (yOffset > 220 && (index + 1) < images.length) {
+                        doc.addPage();
+                        xOffset = 20;
+                        yOffset = 30;
+                    }
+                });
+            }
+
+            doc.setFontSize(8);
+            doc.setTextColor(150);
+            doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
+
+            doc.save(`${d.biz}_Report.pdf`);
+        }
+
+        // ==========================================
+        // LOGICA VAULT, SINCRONIZARE ȘI COLECȚII
+        // ==========================================
+        function showVault() {
+            document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
+            document.getElementById('vaultSection').classList.remove('hidden');
+            renderVault();
+        }
+
+        function setVaultFilter(f) { 
+            currentFilter = f; 
+            renderVault(); 
+        }
+
+        function changeStatus(id) {
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            let r = db.find(x => x.id === id);
+            let next = prompt("New status (Ongoing, Complete, Invalid, Deleted):", r.status);
+            if(next && ["Ongoing", "Complete", "Invalid", "Deleted"].includes(next)) {
+                r.status = next;
+                localStorage.setItem(DB_KEY, JSON.stringify(db));
+                renderVault();
+            }
+        }
+
+        function purgeDeleted() {
+            if(confirm("Permanently delete all records in this folder?")) {
+                let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+                db = db.filter(r => r.status !== 'Deleted');
+                localStorage.setItem(DB_KEY, JSON.stringify(db));
+                renderVault();
+            }
+        }
+
+        function checkForUpdates() {
+            alert("Checking JustCables server for updates...");
+            const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html";
+            
+            fetch(updateUrl, { cache: "no-store" })
+                .then(response => {
+                    if (!response.ok) throw new Error("Network response was not ok");
+                    return response.text();
+                })
+                .then(htmlText => {
+                    if (htmlText.includes("v2.2.0")) {
+                        alert("You are running the latest version! (v2.2.0)");
+                    } else {
+                        if (confirm("New updates found! Do you want to apply them now?")) {
+                            localStorage.setItem('cached_app_code', htmlText);
+                            alert("Update downloaded! Restarting application...");
+                            const cleanUrl = window.location.href.split('?')[0];
+                            window.location.href = cleanUrl + "?updated=" + Date.now();
+                        }
+                    }
+                })
+                .catch(err => {
+                    alert("Update check failed. Make sure you are online or check the URL.");
+                    console.error(err);
+                });
+        }
+
+        function downloadLatestAPK() {
+            const apkUrl = "https://github.com/Rem95/JustCables/releases/download/v2.1.0/app-debug.apk";
+            alert("Opening external browser for secure download...");
+            
+            if (window.cordova && window.cordova.InAppBrowser) {
+                window.cordova.InAppBrowser.open(apkUrl, '_system');
+            } else {
+                window.open(apkUrl, '_system');
+            }
+        }
+
+        function clearFormFields() {
+            const fields = ['bizName', 'clientMail', 'contactName', 'phone', 'totalPrice', 'notes'];
+            fields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+
+            const statusEl = document.getElementById('workStatus');
+            if (statusEl) statusEl.selectedIndex = 0;
+
+            if (typeof clearSignature === 'function') {
+                clearSignature();
+            }
+
+            const photoInput = document.getElementById('jobSheetPhotos');
+            if (photoInput) photoInput.value = ''; 
+            
+            const previewEl = document.getElementById('jobSheetPreview');
+            if (previewEl) previewEl.innerHTML = ''; 
+        }
     </script>
 </body>
 </html>
