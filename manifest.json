@@ -1,0 +1,20 @@
+{
+  "name": "JustCables CRM",
+  "short_name": "JC CRM",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#1B2E4B",
+  "theme_color": "#1B2E4B",
+  "icons": [
+    {
+      "src": "justcablesimage.jpeg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "justcablesimage.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

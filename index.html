@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JustCables Enterprise CRM</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap">
+
+    <style>
+        :root { 
+            --jc-yellow: #ecc94b; 
+            --jc-blue: #0056b3; 
+            --dark-overlay: rgba(13, 20, 31, 0.9); 
+        }
+
+        body { 
+            font-family: 'Montserrat', sans-serif; 
+            margin: 0; padding: 0; color: white; background-color: #000; 
+            overflow-x: hidden;
+        }
+
+        #bgVideo {
+            position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
+            z-index: -1; object-fit: cover; opacity: 0.5;
+        }
+
+        .app-container { 
+            max-width: 600px; margin: 30px auto; padding: 25px; 
+            background: var(--dark-overlay); border-radius: 15px; 
+            border: 1px solid var(--jc-yellow); backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+
+        .hidden { display: none !important; }
+
+        label { font-size: 0.75rem; color: var(--jc-yellow); margin-top: 12px; display: block; font-weight: bold; text-transform: uppercase; }
+        
+        input, select, textarea { 
+            width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: none; 
+            background: rgba(255, 255, 255, 0.9); color: #222; box-sizing: border-box; font-weight: 600;
+        }
+
+        button { 
+            width: 100%; padding: 14px; margin-top: 15px; border-radius: 10px; border: none; 
+            font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.3s;
+        }
+        
+        .btn-main { background-color: var(--jc-yellow); color: #000; letter-spacing: 1px; }
+        .btn-sync { background-color: #28a745; color: white; margin-bottom: 10px; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+        .tab-btn { flex: 1; padding: 10px; text-align: center; background: rgba(255,255,255,0.1); cursor: pointer; border-radius: 8px; font-size: 0.7rem; }
+        .tab-btn.active { background: var(--jc-yellow); color: #000; font-weight: bold; }
+
+        .record-card { 
+            background: rgba(255,255,255,0.08); padding: 15px; border-radius: 10px; 
+            margin-bottom: 10px; border-left: 5px solid var(--jc-yellow);
+        }
+
+        canvas { background: white; border-radius: 8px; margin-top: 10px; width: 100%; height: 150px; touch-action: none; }
+
+        footer { text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,0,0,0.8); border-top: 1px solid var(--jc-yellow); font-size: 12px; }
+    </style>
+</head>
+<body>
+
+    <video autoplay muted loop playsinline id="bgVideo">
+        <source src="background.mp4" type="video/mp4">
+    </video>
+
+    <div id="loginSection" class="app-container">
+        <img src="icon.png" style="width: 100px; display: block; margin: 0 auto 10px;">
+        <h2 style="text-align:center; color:var(--jc-yellow); letter-spacing: 2px;">SECURE ACCESS</h2>
+        
+        <label>Username</label>
+        <input type="text" id="username" placeholder="JustCables ID">
+        
+        <label>Password</label>
+        <input type="password" id="password" placeholder="••••••••">
+        
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 15px;">
+            <label style="display: flex; align-items: center; gap: 10px; text-transform: none; cursor: pointer;">
+                <input type="checkbox" id="showPass" onclick="togglePass()" style="width: 18px;"> Show Password
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; text-transform: none; cursor: pointer;">
+                <input type="checkbox" id="rememberMe" style="width: 18px;"> Remember Me
+            </label>
+        </div>
+
+        <button class="btn-main" onclick="checkLogin()">Authorize</button>
+        <div id="loginError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold;">Access Denied!</div>
+    </div>
+
+    <div id="dashboardSection" class="app-container hidden">
+        <h1 style="text-align:center; color:var(--jc-yellow);">JustCables CRM</h1>
+        <button id="syncBtn" class="btn-sync" style="display:none;" onclick="manualSync()">Sync Pending Data</button>
+        <button class="btn-main" onclick="openForm('Site Survey')">New Site Survey</button>
+        <button class="btn-main" onclick="openForm('Job Sheet')">New Job Sheet</button>
+        <button class="btn-main" onclick="openForm('Maintenance')">New Maintenance</button>
+        <button style="background:#444; color:white;" onclick="showVault()">Records Vault</button>
+        
+        <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="logout()">Logout</button>
+    </div>
+
+    <div id="formSection" class="app-container hidden">
+        <h2 id="formTitle" style="text-align:center; color:var(--jc-yellow);">FORM</h2>
+        
+        <div class="grid-2">
+            <div><label>Business Name *</label><input type="text" id="bizName"></div>
+            <div><label>Client Email *</label><input type="email" id="clientMail"></div>
+        </div>
+        
+        <div class="grid-2">
+            <div><label>Contact Person</label><input type="text" id="contactName"></div>
+            <div><label>Phone Number</label><input type="tel" id="phone"></div>
+        </div>
+
+        <div class="grid-2">
+            <div>
+                <label>Work Status</label>
+                <select id="workStatus">
+                    <option value="Ongoing">Ongoing</option>
+                    <option value="Complete">Complete</option>
+                    <option value="Invalid">Invalid</option>
+                </select>
+            </div>
+            <div><label>Final Price (€)</label><input type="number" id="totalPrice"></div>
+        </div>
+
+        <label>Technical Notes</label>
+        <textarea id="notes" rows="4"></textarea>
+
+        <label>Customer Signature</label>
+        <canvas id="sig-canvas"></canvas>
+        <button type="button" style="background:#333; color:var(--jc-yellow); font-size:0.7rem; padding:8px; margin-top:5px; border:1px solid var(--jc-yellow);" onclick="clearSignature()">Clear Signature</button>
+
+        <div class="grid-2">
+            <button class="btn-main" onclick="saveData()">Save & Export</button>
+            <button style="background:transparent; border:1px solid white; color:white;" onclick="showDashboard()">Back</button>
+        </div>
+    </div>
+
+    <div id="vaultSection" class="app-container hidden">
+        <h2 style="text-align:center; color:var(--jc-yellow);">Vault</h2>
+        <div class="grid-2" style="margin-bottom:15px;">
+            <div id="vOngoing" class="tab-btn active" onclick="setVaultFilter('Ongoing')">Ongoing</div>
+            <div id="vComplete" class="tab-btn" onclick="setVaultFilter('Complete')">Complete</div>
+            <div id="vInvalid" class="tab-btn" onclick="setVaultFilter('Invalid')">Invalid</div>
+            <div id="vDeleted" class="tab-btn" onclick="setVaultFilter('Deleted')" style="color:#ff4d4d;">Deleted</div>
+        </div>
+        <div id="vaultList"></div>
+        <button id="purgeBtn" style="background:#dc3545; color:white; display:none;" onclick="purgeDeleted()">Purge All Deleted</button>
+        <button class="btn-main" onclick="showDashboard()">Back to Dashboard</button>
+    </div>
+
+    <footer>
+        <p>Managed by <strong>JustCables</strong></p>
+        <p>support@justcables.support</p>
+    </footer>
+
+    <script>
+        const { jsPDF } = window.jspdf;
+        const DB_KEY = 'justcables_pro_db';
+        let canvas, ctx, drawing = false, currentFilter = 'Ongoing';
+
+        // MEMORARE LOGIN (Remember Me)
+        window.onload = function() {
+            const savedUser = localStorage.getItem('jc_user');
+            const savedPass = localStorage.getItem('jc_pass');
+            if(savedUser && savedPass) {
+                document.getElementById('username').value = savedUser;
+                document.getElementById('password').value = savedPass;
+                document.getElementById('rememberMe').checked = true;
+            }
+            initCanvas();
+        };
+
+        function togglePass() {
+            const p = document.getElementById('password');
+            p.type = p.type === "password" ? "text" : "password";
+        }
+
+        function checkLogin() {
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            if(u === "JustCables" && p === "JustC@bles!") {
+                if(document.getElementById('rememberMe').checked) {
+                    localStorage.setItem('jc_user', u);
+                    localStorage.setItem('jc_pass', p);
+                } else {
+                    localStorage.removeItem('jc_user');
+                    localStorage.removeItem('jc_pass');
+                }
+                showDashboard();
+            } else {
+                document.getElementById('loginError').style.display = "block";
+            }
+        }
+
+        function logout() { location.reload(); }
+
+        function showDashboard() {
+            document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
+            document.getElementById('dashboardSection').classList.remove('hidden');
+        }
+
+        function openForm(t) {
+            document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
+            document.getElementById('formSection').classList.remove('hidden');
+            document.getElementById('formTitle').innerText = t;
+        }
+
+        // SEMNATURA
+        function initCanvas() {
+            canvas = document.getElementById('sig-canvas'); ctx = canvas.getContext('2d');
+            ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+            const getP = (e) => {
+                const r = canvas.getBoundingClientRect();
+                return { x: (e.clientX || e.touches[0].clientX) - r.left, y: (e.clientY || e.touches[0].clientY) - r.top };
+            };
+            canvas.onmousedown = (e) => { drawing = true; ctx.beginPath(); const p = getP(e); ctx.moveTo(p.x, p.y); };
+            canvas.onmousemove = (e) => { if(drawing) { const p = getP(e); ctx.lineTo(p.x, p.y); ctx.stroke(); } };
+            window.onmouseup = () => drawing = false;
+            canvas.ontouchstart = (e) => { drawing = true; ctx.beginPath(); const p = getP(e); ctx.moveTo(p.x, p.y); e.preventDefault(); };
+            canvas.ontouchmove = (e) => { if(drawing) { const p = getP(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); } };
+        }
+
+        function clearSignature() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+        // ==========================================
+// 1. SALVARE DATE & INTENT EMAIL
+// ==========================================
+function saveData() {
+    const biz = document.getElementById('bizName').value;
+    const mail = document.getElementById('clientMail').value;
+    const type = document.getElementById('formTitle').innerText;
+
+    if(!biz || !mail) return alert("Business Name and Email are required!");
+
+    const data = {
+        id: Date.now(), 
+        biz: biz, 
+        mail: mail, 
+        phone: document.getElementById('phone').value,
+        contact: document.getElementById('contactName').value, 
+        status: document.getElementById('workStatus').value,
+        price: document.getElementById('totalPrice').value, 
+        notes: document.getElementById('notes').value,
+        date: new Date().toLocaleString(), 
+        type: type,
+        sig: document.getElementById('sig-canvas').toDataURL()
+    };
+
+    let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+    db.push(data);
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+
+    // Generăm PDF-ul local cu stilul premium
+    generatePDF(data);
+    
+    // Generare Email Profesional structurat curat
+    const subject = encodeURIComponent(`[JustCables Report] ${data.type} - ${data.biz}`);
+    const body = encodeURIComponent(
+        `Dear Customer,\n\n` +
+        `Please find attached the ${data.type} report at ${data.biz}.\n\n` +
+        `SUMMARY:\n` +
+        `- Date: ${data.date}\n` +
+        `- Engineer: Remus Ivasca\n` +
+        `- Work Status: ${data.status}\n` +
+        `- Total Amount: €${data.price}\n\n` +
+        `TECHNICAL NOTES:\n${data.notes || 'No additional notes.'}\n\n` +
+        `If you have any questions, please contact justcables.support \ justcables@outlook.com.\n\n` +
+        `Best regards,\n` +
+        `Remus Ivasca | JustCables\n` +
+        `Dublin, Ireland | 00353 858130081`
+    );
+
+    window.location.href = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
+    showVault();
+}
+
+// ==========================================
+// 2. GENERARE PDF PROFESIONAL (STIL WEBSITE)
+// ==========================================
+function generatePDF(d) {
+    const doc = new jsPDF();
+    
+    // 1. FUNDAL HEADER - Albastru închis JustCables (ca pe webpage)
+    doc.setFillColor(27, 46, 75); // Culoarea #1B2E4B de pe site-ul tău
+    doc.rect(0, 0, 210, 55, 'F');
+
+    // 2. LOGO (Text de tip Logo + Fundal Galben)
+    doc.setTextColor(236, 201, 75); // Galbenul JustCables
+    doc.setFontSize(26);
+    doc.text("JUSTCABLES", 20, 30);
+    doc.setFontSize(10);
+    doc.text("INFRASTRUCTURE & CABLING EXPERT", 20, 38);
+
+    // 3. DATELE TALE DE CONTACT (Automate - Dreapta Sus)
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.text("Remus Ivasca | Lead Engineer", 140, 25);
+    doc.text("JustCables Infrastructure", 140, 30);
+    doc.text("00353 858130081", 140, 35);
+    doc.text("justcables@outlook.com", 140, 40);
+    doc.text("Dublin | Ireland", 140, 45);
+
+    // 4. CORPUL RAPORTULUI
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(16);
+    doc.text(`${d.type.toUpperCase()}`, 20, 70);
+    
+    doc.setDrawColor(236, 201, 75);
+    doc.line(20, 75, 190, 75); // Linie decorativă galbenă
+
+    doc.setFontSize(11);
+    doc.text(`BUSINESS: ${d.biz}`, 20, 85);
+    doc.text(`CONTACT: ${d.contact || 'N/A'}`, 20, 92);
+    doc.text(`EMAIL: ${d.mail}`, 20, 99);
+    doc.text(`DATE: ${d.date}`, 140, 85);
+
+    doc.setFontSize(12);
+    doc.text("TECHNICAL NOTES:", 20, 115);
+    doc.setFontSize(10);
+    doc.text(d.notes || "No notes provided.", 20, 122, {maxWidth: 170});
+
+    // 5. PREȚ ȘI SEMNĂTURĂ
+    doc.setFontSize(14);
+    doc.text(`TOTAL AMOUNT: €${d.price}`, 20, 170);
+
+    if(d.sig) {
+        doc.setFontSize(10);
+        doc.text("Customer Signature:", 20, 190);
+        doc.addImage(d.sig, 'PNG', 20, 195, 60, 25);
+    }
+
+    // Footer discret
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
+
+    doc.save(`${d.biz}_Report.pdf`);
+}
+
+// Asigură-te că dedesubt ai funcțiile de Vault și Update pe care le-am făcut:
+function showVault() {
+    document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
+    document.getElementById('vaultSection').classList.remove('hidden');
+    renderVault();
+}
+
+function setVaultFilter(f) { currentFilter = f; renderVault(); }
+
+function changeStatus(id) {
+    let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+    let r = db.find(x => x.id === id);
+    let next = prompt("New status (Ongoing, Complete, Invalid, Deleted):", r.status);
+    if(next && ["Ongoing", "Complete", "Invalid", "Deleted"].includes(next)) {
+        r.status = next;
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        renderVault();
+    }
+}
+
+function purgeDeleted() {
+    if(confirm("Permanently delete all records in this folder?")) {
+        let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+        db = db.filter(r => r.status !== 'Deleted');
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        renderVault();
+    }
+}
+
+function checkForUpdates() {
+    alert("Checking JustCables Server for updates...");
+    if ('serviceWorker' in navigator) {
+        navigator.getRegistration().then(registration => {
+            if (registration) {
+                registration.update().then(() => {
+                    alert("JustCables is up to date! (v2.1.0)");
+                });
+            } else {
+                alert("Update system initialized. Will sync on next launch.");
+            }
+        });
+    } else {
+        alert("Updates are only available in Online Mode.");
+    }
+}
+    </script>
+</body>
+</html>
