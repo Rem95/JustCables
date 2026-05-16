@@ -55,12 +55,34 @@
         .tab-btn { flex: 1; padding: 10px; text-align: center; background: rgba(255,255,255,0.1); cursor: pointer; border-radius: 8px; font-size: 0.7rem; }
         .tab-btn.active { background: var(--jc-yellow); color: #000; font-weight: bold; }
 
-        .record-card { 
-            background: rgba(255,255,255,0.08); padding: 15px; border-radius: 10px; 
-            margin-bottom: 10px; border-left: 5px solid var(--jc-yellow);
-        }
-
         canvas { background: white; border-radius: 8px; margin-top: 10px; width: 100%; height: 150px; touch-action: none; }
+
+        /* Stil avansat pentru cardurile din Vault */
+        .record-card { 
+            background: rgba(255,255,255,0.06); padding: 15px; border-radius: 10px; 
+            margin-bottom: 12px; border-left: 5px solid var(--jc-yellow);
+            position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            text-align: left;
+        }
+        .record-card h4 { margin: 0 0 5px 0; color: var(--jc-yellow); font-size: 1rem; }
+        .record-card p { margin: 3px 0; font-size: 0.8rem; color: #ddd; text-align: left; }
+        .record-card .meta-type { font-size: 0.7rem; background: rgba(236, 201, 75, 0.2); color: var(--jc-yellow); padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 5px; font-weight: bold; }
+
+        /* Meniu Dropdown pentru Actiuni Directe */
+        .dropdown-container { position: absolute; right: 15px; top: 15px; }
+        .dropdown-btn { background: #333; color: var(--jc-yellow); border: 1px solid var(--jc-yellow); padding: 5px 10px; border-radius: 5px; font-size: 0.75rem; cursor: pointer; font-weight: bold; }
+        
+        .dropdown-content { 
+            display: none; position: absolute; right: 0; background: #1a2636; 
+            min-width: 175px; box-shadow: 0px 8px 16px rgba(0,0,0,0.5); z-index: 10; 
+            border-radius: 6px; border: 1px solid rgba(236, 201, 75, 0.4); overflow: hidden;
+        }
+        .dropdown-content button { 
+            width: 100%; padding: 10px; margin: 0; text-align: left; background: transparent; 
+            color: white; font-size: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.05); border-radius: 0; border: none;
+        }
+        .dropdown-content button:hover { background: var(--jc-yellow); color: black; }
+        .show-menu { display: block !important; }
 
         footer { text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,0,0,0.8); border-top: 1px solid var(--jc-yellow); font-size: 12px; }
     </style>
@@ -162,15 +184,22 @@
     </div>
 
     <div id="vaultSection" class="app-container hidden">
-        <h2 style="text-align:center; color:var(--jc-yellow);">Vault</h2>
-        <div class="grid-2" style="margin-bottom:15px;">
+        <h2 style="text-align:center; color:var(--jc-yellow); margin-bottom: 5px;">Records Vault</h2>
+        
+        <div style="margin-bottom: 15px;">
+            <input type="text" id="vaultSearch" placeholder="🔍 Search business, phone, email, notes..." oninput="renderVault()" style="background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(236, 201, 75, 0.3); padding: 10px;">
+        </div>
+
+        <div class="grid-2" style="margin-bottom:15px; gap: 8px;">
             <div id="vOngoing" class="tab-btn active" onclick="setVaultFilter('Ongoing')">Ongoing</div>
             <div id="vComplete" class="tab-btn" onclick="setVaultFilter('Complete')">Complete</div>
             <div id="vInvalid" class="tab-btn" onclick="setVaultFilter('Invalid')">Invalid</div>
             <div id="vDeleted" class="tab-btn" onclick="setVaultFilter('Deleted')" style="color:#ff4d4d;">Deleted</div>
         </div>
-        <div id="vaultList"></div>
-        <button id="purgeBtn" style="background:#dc3545; color:white; display:none;" onclick="purgeDeleted()">Purge All Deleted</button>
+
+        <div id="vaultList" style="max-height: 400px; overflow-y: auto; margin-bottom: 15px; padding-right: 5px;"></div>
+        
+        <button id="purgeBtn" style="background:#dc3545; color:white; display:none; margin-top: 5px;" onclick="purgeDeleted()">Purge All Deleted</button>
         <button class="btn-main" onclick="showDashboard()">Back to Dashboard</button>
     </div>
 
@@ -284,9 +313,6 @@
             });
         }
 
-        // ==========================================
-        // 1. SALVARE DATE & INTENT EMAIL
-        // ==========================================
         function saveData() {
             const biz = document.getElementById('bizName').value;
             const mail = document.getElementById('clientMail').value;
@@ -334,9 +360,6 @@
             showVault();
         }
 
-        // ==========================================
-        // 2. GENERARE PDF PROFESIONAL (STIL WEBSITE)
-        // ==========================================
         function generatePDF(d) {
             const doc = new jsPDF();
             
@@ -421,9 +444,6 @@
             doc.save(`${d.biz}_Report.pdf`);
         }
 
-        // ==========================================
-        // LOGICA VAULT, SINCRONIZARE ȘI COLECȚII
-        // ==========================================
         function showVault() {
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('vaultSection').classList.remove('hidden');
@@ -435,14 +455,139 @@
             renderVault(); 
         }
 
-        function changeStatus(id) {
+        function renderVault() {
+            const list = document.getElementById('vaultList');
+            const searchVal = document.getElementById('vaultSearch').value.toLowerCase();
+            const purgeBtn = document.getElementById('purgeBtn');
+            
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            list.innerHTML = '';
+
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            if(currentFilter === 'Ongoing') document.getElementById('vOngoing').classList.add('active');
+            if(currentFilter === 'Complete') document.getElementById('vComplete').classList.add('active');
+            if(currentFilter === 'Invalid') document.getElementById('vInvalid').classList.add('active');
+            if(currentFilter === 'Deleted') document.getElementById('vDeleted').classList.add('active');
+
+            if(purgeBtn) {
+                purgeBtn.style.display = (currentFilter === 'Deleted' && db.some(r => r.status === 'Deleted')) ? 'block' : 'none';
+            }
+
+            let filtered = db.filter(r => {
+                const matchesStatus = r.status === currentFilter;
+                const combinedText = `${r.biz} ${r.mail} ${r.contact || ''} ${r.phone || ''} ${r.notes || ''} ${r.type || ''}`.toLowerCase();
+                const matchesSearch = combinedText.includes(searchVal);
+                return matchesStatus && matchesSearch;
+            });
+
+            if(filtered.length === 0) {
+                list.innerHTML = `<p style="text-align:center; color:#888; font-size:0.85rem; margin-top:20px;">No records found in this section.</p>`;
+                return;
+            }
+
+            filtered.forEach(r => {
+                const card = document.createElement('div');
+                card.className = 'record-card';
+                
+                if(r.type.includes('Survey')) card.style.borderLeftColor = '#0056b3'; 
+                if(r.type.includes('Maintenance')) card.style.borderLeftColor = '#28a745'; 
+
+                card.innerHTML = `
+                    <div class="dropdown-container">
+                        <button class="dropdown-btn" onclick="toggleDropdownMenu(event, ${r.id})">Actions ▾</button>
+                        <div id="drop-${r.id}" class="dropdown-content">
+                            <button onclick="previewRecord(${r.id})">👁️ Preview Mode</button>
+                            <button onclick="resendEmailPrompt(${r.id})">📩 Resend Email</button>
+                            <button onclick="downloadSinglePDF(${r.id})">📥 Download PDF</button>
+                            
+                            <div style="background: rgba(0,0,0,0.3); padding: 5px; border-top: 1px solid rgba(236,201,75,0.2); margin-top: 5px;">
+                                <span style="font-size: 0.65rem; color: var(--jc-yellow); display: block; padding: 2px 5px; font-weight: bold; text-transform: uppercase;">Set Status:</span>
+                                <button onclick="updateStatusInline(${r.id}, 'Ongoing')" style="padding: 6px 10px; font-size: 0.7rem; border: none;">🔄 Ongoing</button>
+                                <button onclick="updateStatusInline(${r.id}, 'Complete')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #28a745;">✅ Complete</button>
+                                <button onclick="updateStatusInline(${r.id}, 'Invalid')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #ecc94b;">⚠️ Invalid</button>
+                                <button onclick="updateStatusInline(${r.id}, 'Deleted')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #ff4d4d;">🗑️ Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                    <h4>${r.biz}</h4>
+                    <p><strong>Contact:</strong> ${r.contact || 'N/A'} | <strong>Phone:</strong> ${r.phone || 'N/A'}</p>
+                    <p><strong>Email:</strong> ${r.mail}</p>
+                    <p><strong>Date:</strong> ${r.date}</p>
+                    <p><strong>Price:</strong> €${r.price || '0'}</p>
+                    <span class="meta-type">${r.type.toUpperCase()}</span>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function toggleDropdownMenu(e, id) {
+            e.stopPropagation();
+            document.querySelectorAll('.dropdown-content').forEach(el => {
+                if(el.id !== `drop-${id}`) el.classList.remove('show-menu');
+            });
+            document.getElementById(`drop-${id}`).classList.toggle('show-menu');
+        }
+
+        window.addEventListener('click', function() {
+            document.querySelectorAll('.dropdown-content').forEach(el => el.classList.remove('show-menu'));
+        });
+
+        function previewRecord(id) {
             let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
             let r = db.find(x => x.id === id);
-            let next = prompt("New status (Ongoing, Complete, Invalid, Deleted):", r.status);
-            if(next && ["Ongoing", "Complete", "Invalid", "Deleted"].includes(next)) {
-                r.status = next;
+            if(!r) return;
+
+            openForm(r.type);
+            document.getElementById('bizName').value = r.biz;
+            document.getElementById('clientMail').value = r.mail;
+            document.getElementById('contactName').value = r.contact || '';
+            document.getElementById('phone').value = r.phone || '';
+            document.getElementById('totalPrice').value = r.price || '';
+            document.getElementById('notes').value = r.notes || '';
+            document.getElementById('workStatus').value = r.status;
+
+            if(r.sig) {
+                let img = new Image();
+                img.src = r.sig;
+                img.onload = function() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                };
+            }
+        }
+
+        function resendEmailPrompt(id) {
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            let r = db.find(x => x.id === id);
+            if(!r) return;
+
+            let targetEmail = prompt("Confirm or change recipient email address:", r.mail);
+            if(!targetEmail) return;
+
+            const subject = encodeURIComponent(`[JustCables Copy] ${r.type} - ${r.biz}`);
+            const body = encodeURIComponent(
+                `Dear Customer,\n\nHere is a requested copy of your ${r.type} report.\n\n` +
+                `SUMMARY:\n- Date: ${r.date}\n- Work Status: ${r.status}\n- Total Amount: €${r.price}\n\n` +
+                `Best regards,\nRemus Ivasca | JustCables`
+            );
+
+            window.location.href = `mailto:${targetEmail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
+        }
+
+        function downloadSinglePDF(id) {
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            let r = db.find(x => x.id === id);
+            if(r) generatePDF(r);
+        }
+
+        function updateStatusInline(id, newStatus) {
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            let r = db.find(x => x.id === id);
+            
+            if (r) {
+                r.status = newStatus;
                 localStorage.setItem(DB_KEY, JSON.stringify(db));
-                renderVault();
+                renderVault(); 
             }
         }
 
