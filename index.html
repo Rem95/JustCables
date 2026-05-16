@@ -356,7 +356,12 @@
                 `Dublin, Ireland | 00353 858130081`
             );
 
-            window.location.href = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
+            const mailUrl = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
+            if (window.cordova && window.cordova.InAppBrowser) {
+                window.cordova.InAppBrowser.open(mailUrl, '_system');
+            } else {
+                window.location.href = mailUrl;
+            }
             showVault();
         }
 
@@ -441,7 +446,12 @@
             doc.setTextColor(150);
             doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
 
-            doc.save(`${d.biz}_Report.pdf`);
+            if (window.cordova) {
+                const pdfOutput = doc.output('datauristring');
+                window.open(pdfOutput, '_system');
+            } else {
+                doc.save(`${d.biz}_Report.pdf`);
+            }
         }
 
         function showVault() {
@@ -496,16 +506,16 @@
                     <div class="dropdown-container">
                         <button class="dropdown-btn" onclick="toggleDropdownMenu(event, ${r.id})">Actions ▾</button>
                         <div id="drop-${r.id}" class="dropdown-content">
-                            <button onclick="previewRecord(${r.id})">👁️ Preview Mode</button>
-                            <button onclick="resendEmailPrompt(${r.id})">📩 Resend Email</button>
-                            <button onclick="downloadSinglePDF(${r.id})">📥 Download PDF</button>
+                            <button onclick="event.stopPropagation(); previewRecord(${r.id})">👁️ Preview Mode</button>
+                            <button onclick="event.stopPropagation(); resendEmailPrompt(${r.id})">📩 Resend Email</button>
+                            <button onclick="event.stopPropagation(); downloadSinglePDF(${r.id})">📥 Download PDF</button>
                             
-                            <div style="background: rgba(0,0,0,0.3); padding: 5px; border-top: 1px solid rgba(236,201,75,0.2); margin-top: 5px;">
+                            <div style="background: rgba(0,0,0,0.3); padding: 5px; border-top: 1px solid rgba(236,201,75,0.2); margin-top: 5px;" onclick="event.stopPropagation();">
                                 <span style="font-size: 0.65rem; color: var(--jc-yellow); display: block; padding: 2px 5px; font-weight: bold; text-transform: uppercase;">Set Status:</span>
-                                <button onclick="updateStatusInline(${r.id}, 'Ongoing')" style="padding: 6px 10px; font-size: 0.7rem; border: none;">🔄 Ongoing</button>
-                                <button onclick="updateStatusInline(${r.id}, 'Complete')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #28a745;">✅ Complete</button>
-                                <button onclick="updateStatusInline(${r.id}, 'Invalid')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #ecc94b;">⚠️ Invalid</button>
-                                <button onclick="updateStatusInline(${r.id}, 'Deleted')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #ff4d4d;">🗑️ Delete</button>
+                                <button onclick="event.stopPropagation(); updateStatusInline(${r.id}, 'Ongoing')" style="padding: 6px 10px; font-size: 0.7rem; border: none;">🔄 Ongoing</button>
+                                <button onclick="event.stopPropagation(); updateStatusInline(${r.id}, 'Complete')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #28a745;">✅ Complete</button>
+                                <button onclick="event.stopPropagation(); updateStatusInline(${r.id}, 'Invalid')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #ecc94b;">⚠️ Invalid</button>
+                                <button onclick="event.stopPropagation(); updateStatusInline(${r.id}, 'Deleted')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #ff4d4d;">🗑️ Delete</button>
                             </div>
                         </div>
                     </div>
@@ -571,7 +581,12 @@
                 `Best regards,\nRemus Ivasca | JustCables`
             );
 
-            window.location.href = `mailto:${targetEmail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
+            const mailUrl = `mailto:${targetEmail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
+            if (window.cordova && window.cordova.InAppBrowser) {
+                window.cordova.InAppBrowser.open(mailUrl, '_system');
+            } else {
+                window.location.href = mailUrl;
+            }
         }
 
         function downloadSinglePDF(id) {
