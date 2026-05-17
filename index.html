@@ -117,7 +117,7 @@
     </div>
 
     <div id="dashboardSection" class="app-container hidden">
-        <h1 style="text-align:center; color:var(--jc-yellow);">JustCables CRM</h1>
+        <h1 style="text-align:center; color:var(--jc-yellow);">JustCables CRM (v2.3.0)</h1>
         <button id="syncBtn" class="btn-sync" style="display:none;" onclick="manualSync()">Sync Pending Data</button>
         <button class="btn-main" onclick="openForm('Site Survey')">New Site Survey</button>
         <button class="btn-main" onclick="openForm('Job Sheet')">New Job Sheet</button>
@@ -216,10 +216,15 @@
         window.onload = function() {
             const cachedCode = localStorage.getItem('cached_app_code');
             
-            if (cachedCode && !window.location.search.includes('updated=')) {
+            // Forțăm ocolirea cache-ului dacă motorul v2.3.0 rulează pe un link live
+            if (cachedCode && !window.location.search.includes('bypass_cache=1')) {
                 document.open();
                 document.write(cachedCode);
                 document.close();
+                
+                if (!window.location.search.includes('updated=')) {
+                    window.location.href = window.location.href.split('?')[0] + "?updated=" + Date.now() + "&bypass_cache=1";
+                }
                 return;
             }
 
@@ -617,7 +622,7 @@
 
         function checkForUpdates() {
             alert("Checking JustCables server for updates...");
-            const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html";
+            const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
             
             fetch(updateUrl, { cache: "no-store" })
                 .then(response => {
@@ -625,10 +630,10 @@
                     return response.text();
                 })
                 .then(htmlText => {
-                    if (htmlText.includes("v2.2.0")) {
-                        alert("You are running the latest version! (v2.2.0)");
+                    if (htmlText.includes("v2.3.0")) {
+                        alert("You are running the latest version! (v2.3.0)");
                     } else {
-                        if (confirm("New updates found! Do you want to apply them now?")) {
+                        if (confirm("New updates found (v2.3.0)! Do you want to apply them now?")) {
                             localStorage.setItem('cached_app_code', htmlText);
                             alert("Update downloaded! Restarting application...");
                             const cleanUrl = window.location.href.split('?')[0];
