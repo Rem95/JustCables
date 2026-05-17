@@ -216,7 +216,6 @@
         window.onload = function() {
             const cachedCode = localStorage.getItem('cached_app_code');
             
-            // Forțăm ocolirea cache-ului dacă motorul v2.3.0 rulează pe un link live
             if (cachedCode && !window.location.search.includes('bypass_cache=1')) {
                 document.open();
                 document.write(cachedCode);
