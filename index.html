@@ -621,7 +621,7 @@
 
         function checkForUpdates() {
             alert("Checking JustCables server for updates...");
-            const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
+        const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
             
             fetch(updateUrl, { cache: "no-store" })
                 .then(response => {
@@ -629,7 +629,7 @@
                     return response.text();
                 })
                 .then(htmlText => {
-                    if (htmlText.includes("v2.3.0")) {
+                   if (htmlText.includes("v2.0.0")) {
                         alert("You are running the latest version! (v2.3.0)");
                     } else {
                         if (confirm("New updates found (v2.3.0)! Do you want to apply them now?")) {
