@@ -125,18 +125,18 @@
         <button style="background:#444; color:white;" onclick="showVault()">Records Vault</button>
 
         <div class="grid-2" style="margin-top: 15px;">
-            <button type="button" onclick="pushToCloud()" 
-                    style="background: transparent; color: white; border: 1px solid var(--jc-yellow); font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
-                    onclick="checkForUpdates()">
-                SYNC UPDATE
-            </button>
-            
-            <button type="button" 
-                    style="background: #28a745; color: white; font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
-                    onclick="downloadLatestAPK()">
-                DOWNLOAD APK
-            </button>
-        </div>
+    <button type="button" 
+            style="background: transparent; color: white; border: 1px solid var(--jc-yellow); font-size: 0.65rem; padding: 10px;" 
+            onclick="checkForUpdates()">
+        🔄 SYNC UPDATE
+    </button>
+    
+    <button type="button" 
+            style="background: #28a745; color: white; font-size: 0.65rem; padding: 10px;" 
+            onclick="pushToCloud()">
+        📤 PUSH TO CLOUD
+    </button>
+</div>
 
         <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="logout()">Logout</button>
     </div>
