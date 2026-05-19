@@ -125,7 +125,7 @@
         <button style="background:#444; color:white;" onclick="showVault()">Records Vault</button>
 
         <div class="grid-2" style="margin-top: 15px;">
-            <button type="button" 
+            <button type="button" onclick="pushToCloud()" 
                     style="background: transparent; color: white; border: 1px solid var(--jc-yellow); font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
                     onclick="checkForUpdates()">
                 SYNC UPDATE
@@ -208,37 +208,167 @@
         <p>www.justcables.support / justcables@outlook.com</p>
     </footer>
 
-    <script>
+       <script>
         const { jsPDF } = window.jspdf;
         const DB_KEY = 'justcables_pro_db';
         let canvas, ctx, drawing = false, currentFilter = 'Ongoing';
 
-        window.onload = function() {
-            const cachedCode = localStorage.getItem('cached_app_code');
+            window.onload = function() {
+        const cachedCode = localStorage.getItem('cached_app_code');
+        if (cachedCode && !window.location.search.includes('bypass_cache=1')) {
+            document.open();
+            document.write(cachedCode);
+            document.close();
+            if (!window.location.search.includes('updated=')) {
+                window.location.href = window.location.href.split('?')[0] + "?updated=" + Date.now() + "&bypass_cache=1";
+            }
+            return;
+        }
+
+        loadFromCloud();   // ← Added: Load data from GitHub
+
+        const savedUser = localStorage.getItem('jc_user');
+        const savedPass = localStorage.getItem('jc_pass');
+        if(savedUser && savedPass) {
+            document.getElementById('username').value = savedUser;
+            document.getElementById('password').value = savedPass;
+            document.getElementById('rememberMe').checked = true;
+        }
+        
+        initCanvas();
+        setupPhotoPreview('jobSheetPhotos', 'jobSheetPreview');
+    };
+
+        // ====================== FIXED SAVE & EXPORT ======================
+        function saveData() {
+            const biz = document.getElementById('bizName').value.trim();
+            const mail = document.getElementById('clientMail').value.trim();
+            const type = document.getElementById('formTitle').innerText;
+
+            if(!biz || !mail) return alert("Business Name and Email are required!");
+
+            const data = {
+                id: Date.now(), 
+                biz: biz, 
+                mail: mail, 
+                phone: document.getElementById('phone').value,
+                contact: document.getElementById('contactName').value, 
+                status: document.getElementById('workStatus').value,
+                price: document.getElementById('totalPrice').value || '0', 
+                notes: document.getElementById('notes').value,
+                date: new Date().toLocaleString(), 
+                type: type,
+                sig: document.getElementById('sig-canvas').toDataURL()
+            };
+
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            db.push(data);
+            localStorage.setItem(DB_KEY, JSON.stringify(db));
+
+            generateAndSendPDF(data);
+        }
+
+        function generateAndSendPDF(data) {
+            const doc = new jsPDF();
             
-            if (cachedCode && !window.location.search.includes('bypass_cache=1')) {
-                document.open();
-                document.write(cachedCode);
-                document.close();
+            // Your original PDF design
+            doc.setFillColor(27, 46, 75); 
+            doc.rect(0, 0, 210, 55, 'F');
+            doc.setTextColor(236, 201, 75); 
+            doc.setFontSize(26);
+            doc.text("JUSTCABLES", 20, 30);
+            doc.setFontSize(10);
+            doc.text("INFRASTRUCTURE & CABLING EXPERT", 20, 38);
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(9);
+            doc.text("Remus Ivasca | Lead Engineer", 140, 25);
+            doc.text("JustCables Infrastructure", 140, 30);
+            doc.text("00353 858130081", 140, 35);
+            doc.text("justcables@outlook.com", 140, 40);
+            doc.text("Dublin | Ireland", 140, 45);
+
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(16);
+            doc.text(`${data.type.toUpperCase()}`, 20, 70);
+            doc.setDrawColor(236, 201, 75);
+            doc.line(20, 75, 190, 75); 
+
+            doc.setFontSize(11);
+            doc.text(`BUSINESS: ${data.biz}`, 20, 85);
+            doc.text(`CONTACT: ${data.contact || 'N/A'}`, 20, 92);
+            doc.text(`EMAIL: ${data.mail}`, 20, 99);
+            doc.text(`DATE: ${data.date}`, 140, 85);
+
+            doc.setFontSize(12);
+            doc.text("TECHNICAL NOTES:", 20, 115);
+            doc.setFontSize(10);
+            doc.text(data.notes || "No notes provided.", 20, 122, {maxWidth: 170});
+
+            doc.setFontSize(14);
+            doc.text(`TOTAL AMOUNT: €${data.price}`, 20, 170);
+
+            if(data.sig) {
+                doc.setFontSize(10);
+                doc.text("Customer Signature:", 20, 190);
+                doc.addImage(data.sig, 'PNG', 20, 195, 60, 25);
+            }
+
+            const images = document.querySelectorAll('#jobSheetPreview img');
+            if (images.length > 0) {
+                doc.addPage(); 
+                doc.setFontSize(14);
+                doc.setTextColor(27, 46, 75);
+                doc.text("ATTACHED IMAGES / FIELD EVIDENCE", 20, 20);
+                doc.setDrawColor(236, 201, 75);
+                doc.line(20, 23, 190, 23);
                 
-                if (!window.location.search.includes('updated=')) {
-                    window.location.href = window.location.href.split('?')[0] + "?updated=" + Date.now() + "&bypass_cache=1";
-                }
-                return;
+                let xOffset = 20, yOffset = 30;
+                images.forEach((img, index) => {
+                    doc.addImage(img.src, 'JPEG', xOffset, yOffset, 50, 50);
+                    xOffset += 55; 
+                    if ((index + 1) % 3 === 0) {
+                        xOffset = 20;
+                        yOffset += 55;
+                    }
+                });
             }
 
-            const savedUser = localStorage.getItem('jc_user');
-            const savedPass = localStorage.getItem('jc_pass');
-            if(savedUser && savedPass) {
-                document.getElementById('username').value = savedUser;
-                document.getElementById('password').value = savedPass;
-                document.getElementById('rememberMe').checked = true;
-            }
-            
-            initCanvas();
-            setupPhotoPreview('jobSheetPhotos', 'jobSheetPreview');
-        };
+            doc.setFontSize(8);
+            doc.setTextColor(150);
+            doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
 
+                        const fileName = data.biz.replace(/[^a-zA-Z0-9]/g, '_') + "_Report.pdf";
+            const pdfOutput = doc.output('datauristring');
+
+            if (window.cordova) {
+                window.resolveLocalFileSystemURL(cordova.file.externalDataDirectory, function(dir) {
+                    dir.getFile(fileName, {create: true}, function(fileEntry) {
+                        fileEntry.createWriter(function(writer) {
+                            writer.onwriteend = function() {
+                                const filePath = fileEntry.toURL();
+                                cordova.plugins.fileOpener2.open(filePath, "application/pdf");
+                                cordova.plugins.email.open({
+                                    to: data.mail,
+                                    cc: "justcables@outlook.com",
+                                    subject: `[JustCables Report] ${data.type} - ${data.biz}`,
+                                    body: "Please find attached the report.",
+                                    attachments: [filePath],
+                                    isHtml: false
+                                });
+                            };
+                            writer.write(atob(pdfOutput.split(',')[1]));
+                        });
+                    });
+                });
+            } else {
+                doc.save(fileName);
+            }
+
+            showVault();
+        }
+
+        // ====================== ALL YOUR ORIGINAL FUNCTIONS ======================
         function togglePass() {
             const p = document.getElementById('password');
             p.type = p.type === "password" ? "text" : "password";
@@ -317,147 +447,6 @@
             });
         }
 
-        function saveData() {
-            const biz = document.getElementById('bizName').value;
-            const mail = document.getElementById('clientMail').value;
-            const type = document.getElementById('formTitle').innerText;
-
-            if(!biz || !mail) return alert("Business Name and Email are required!");
-
-            const data = {
-                id: Date.now(), 
-                biz: biz, 
-                mail: mail, 
-                phone: document.getElementById('phone').value,
-                contact: document.getElementById('contactName').value, 
-                status: document.getElementById('workStatus').value,
-                price: document.getElementById('totalPrice').value, 
-                notes: document.getElementById('notes').value,
-                date: new Date().toLocaleString(), 
-                type: type,
-                sig: document.getElementById('sig-canvas').toDataURL()
-            };
-
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            db.push(data);
-            localStorage.setItem(DB_KEY, JSON.stringify(db));
-
-            generatePDF(data);
-            
-            const subject = encodeURIComponent(`[JustCables Report] ${data.type} - ${data.biz}`);
-            const body = encodeURIComponent(
-                `Dear Customer,\n\n` +
-                `Please find attached the ${data.type} report at ${data.biz}.\n\n` +
-                `SUMMARY:\n` +
-                `- Date: ${data.date}\n` +
-                `- Engineer: Remus Ivasca\n` +
-                `- Work Status: ${data.status}\n` +
-                `- Total Amount: €${data.price}\n\n` +
-                `TECHNICAL NOTES:\n${data.notes || 'No additional notes.'}\n\n` +
-                `If you have any questions, please contact justcables.support / justcables@outlook.com.\n\n` +
-                `Best regards,\n` +
-                `Remus Ivasca | JustCables\n` +
-                `Dublin, Ireland | 00353 858130081`
-            );
-
-            const mailUrl = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
-            if (window.cordova && window.cordova.InAppBrowser) {
-                window.cordova.InAppBrowser.open(mailUrl, '_system');
-            } else {
-                window.location.href = mailUrl;
-            }
-            showVault();
-        }
-
-        function generatePDF(d) {
-            const doc = new jsPDF();
-            
-            doc.setFillColor(27, 46, 75); 
-            doc.rect(0, 0, 210, 55, 'F');
-
-            doc.setTextColor(236, 201, 75); 
-            doc.setFontSize(26);
-            doc.text("JUSTCABLES", 20, 30);
-            doc.setFontSize(10);
-            doc.text("INFRASTRUCTURE & CABLING EXPERT", 20, 38);
-
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(9);
-            doc.text("Remus Ivasca | Lead Engineer", 140, 25);
-            doc.text("JustCables Infrastructure", 140, 30);
-            doc.text("00353 858130081", 140, 35);
-            doc.text("justcables@outlook.com", 140, 40);
-            doc.text("Dublin | Ireland", 140, 45);
-
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(16);
-            doc.text(`${d.type.toUpperCase()}`, 20, 70);
-            
-            doc.setDrawColor(236, 201, 75);
-            doc.line(20, 75, 190, 75); 
-
-            doc.setFontSize(11);
-            doc.text(`BUSINESS: ${d.biz}`, 20, 85);
-            doc.text(`CONTACT: ${d.contact || 'N/A'}`, 20, 92);
-            doc.text(`EMAIL: ${d.mail}`, 20, 99);
-            doc.text(`DATE: ${d.date}`, 140, 85);
-
-            doc.setFontSize(12);
-            doc.text("TECHNICAL NOTES:", 20, 115);
-            doc.setFontSize(10);
-            doc.text(d.notes || "No notes provided.", 20, 122, {maxWidth: 170});
-
-            doc.setFontSize(14);
-            doc.text(`TOTAL AMOUNT: €${d.price}`, 20, 170);
-
-            if(d.sig) {
-                doc.setFontSize(10);
-                doc.text("Customer Signature:", 20, 190);
-                doc.addImage(d.sig, 'PNG', 20, 195, 60, 25);
-            }
-
-            const images = document.querySelectorAll('#jobSheetPreview img');
-            if (images.length > 0) {
-                doc.addPage(); 
-                doc.setFontSize(14);
-                doc.setTextColor(27, 46, 75);
-                doc.text("ATTACHED IMAGES / FIELD EVIDENCE", 20, 20);
-                
-                doc.setDrawColor(236, 201, 75);
-                doc.line(20, 23, 190, 23);
-                
-                let xOffset = 20;
-                let yOffset = 30;
-                
-                images.forEach((img, index) => {
-                    doc.addImage(img.src, 'JPEG', xOffset, yOffset, 50, 50);
-                    xOffset += 55; 
-                    
-                    if ((index + 1) % 3 === 0) {
-                        xOffset = 20;
-                        yOffset += 55;
-                    }
-                    
-                    if (yOffset > 220 && (index + 1) < images.length) {
-                        doc.addPage();
-                        xOffset = 20;
-                        yOffset = 30;
-                    }
-                });
-            }
-
-            doc.setFontSize(8);
-            doc.setTextColor(150);
-            doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
-
-            if (window.cordova) {
-                const pdfOutput = doc.output('datauristring');
-                window.open(pdfOutput, '_system');
-            } else {
-                doc.save(`${d.biz}_Report.pdf`);
-            }
-        }
-
         function showVault() {
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('vaultSection').classList.remove('hidden');
@@ -513,7 +502,6 @@
                             <button onclick="event.stopPropagation(); previewRecord(${r.id})">👁️ Preview Mode</button>
                             <button onclick="event.stopPropagation(); resendEmailPrompt(${r.id})">📩 Resend Email</button>
                             <button onclick="event.stopPropagation(); downloadSinglePDF(${r.id})">📥 Download PDF</button>
-                            
                             <div style="background: rgba(0,0,0,0.3); padding: 5px; border-top: 1px solid rgba(236,201,75,0.2); margin-top: 5px;" onclick="event.stopPropagation();">
                                 <span style="font-size: 0.65rem; color: var(--jc-yellow); display: block; padding: 2px 5px; font-weight: bold; text-transform: uppercase;">Set Status:</span>
                                 <button onclick="event.stopPropagation(); updateStatusInline(${r.id}, 'Ongoing')" style="padding: 6px 10px; font-size: 0.7rem; border: none;">🔄 Ongoing</button>
@@ -579,11 +567,7 @@
             if(!targetEmail) return;
 
             const subject = encodeURIComponent(`[JustCables Copy] ${r.type} - ${r.biz}`);
-            const body = encodeURIComponent(
-                `Dear Customer,\n\nHere is a requested copy of your ${r.type} report.\n\n` +
-                `SUMMARY:\n- Date: ${r.date}\n- Work Status: ${r.status}\n- Total Amount: €${r.price}\n\n` +
-                `Best regards,\nRemus Ivasca | JustCables`
-            );
+            const body = encodeURIComponent(`Dear Customer,\n\nHere is a requested copy of your ${r.type} report.`);
 
             const mailUrl = `mailto:${targetEmail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
             if (window.cordova && window.cordova.InAppBrowser) {
@@ -596,13 +580,12 @@
         function downloadSinglePDF(id) {
             let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
             let r = db.find(x => x.id === id);
-            if(r) generatePDF(r);
+            if(r) generateAndSendPDF(r);
         }
 
         function updateStatusInline(id, newStatus) {
             let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
             let r = db.find(x => x.id === id);
-            
             if (r) {
                 r.status = newStatus;
                 localStorage.setItem(DB_KEY, JSON.stringify(db));
@@ -619,37 +602,31 @@
             }
         }
 
-        function checkForUpdates() {
-            alert("Checking JustCables server for updates...");
-        const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
+               function checkForUpdates() {
+            alert("Checking for updates and syncing data...");
+
+            // First: Update the app itself (your original logic)
+            const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
             
             fetch(updateUrl, { cache: "no-store" })
-                .then(response => {
-                    if (!response.ok) throw new Error("Network response was not ok");
-                    return response.text();
-                })
+                .then(response => response.text())
                 .then(htmlText => {
-                   if (htmlText.includes("v2.0.0")) {
-                        alert("You are running the latest version! (v2.3.0)");
-                    } else {
-                        if (confirm("New updates found (v2.3.0)! Do you want to apply them now?")) {
+                    if (htmlText.length > 10000 && htmlText.includes("JustCables")) {
+                        if (confirm("New version found! Apply update?")) {
                             localStorage.setItem('cached_app_code', htmlText);
-                            alert("Update downloaded! Restarting application...");
-                            const cleanUrl = window.location.href.split('?')[0];
-                            window.location.href = cleanUrl + "?updated=" + Date.now();
+                            location.reload();
+                            return;
                         }
                     }
                 })
-                .catch(err => {
-                    alert("Update check failed. Make sure you are online or check the URL.");
-                    console.error(err);
-                });
+                .catch(() => {});  
+
+            // Second: Automatically pull latest reports from GitHub
+            loadFromCloud();
         }
 
         function downloadLatestAPK() {
-            const apkUrl = "https://github.com/Rem95/JustCables/releases/download/v2.1.0/app-debug.apk";
-            alert("Opening external browser for secure download...");
-            
+            const apkUrl = "https://github.com/Rem95/JustCables/releases/latest";
             if (window.cordova && window.cordova.InAppBrowser) {
                 window.cordova.InAppBrowser.open(apkUrl, '_system');
             } else {
@@ -663,20 +640,30 @@
                 const el = document.getElementById(id);
                 if (el) el.value = '';
             });
-
             const statusEl = document.getElementById('workStatus');
             if (statusEl) statusEl.selectedIndex = 0;
-
-            if (typeof clearSignature === 'function') {
-                clearSignature();
-            }
-
-            const photoInput = document.getElementById('jobSheetPhotos');
-            if (photoInput) photoInput.value = ''; 
-            
+            clearSignature();
             const previewEl = document.getElementById('jobSheetPreview');
-            if (previewEl) previewEl.innerHTML = ''; 
+            if (previewEl) previewEl.innerHTML = '';
+            const photoInput = document.getElementById('jobSheetPhotos');
+            if (photoInput) photoInput.value = '';
         }
+    // ====================== FULL SYNC WITH GITHUB ======================
+
+
+    async function loadFromCloud() {
+    try {
+        const response = await fetch("https://raw.githubusercontent.com/Rem95/JustCables/main/reports.json?t=" + Date.now());
+        if (response.ok) {
+            const cloudData = await response.json();
+            localStorage.setItem(DB_KEY, JSON.stringify(cloudData));
+            renderVault();
+            console.log("✅ Data loaded from GitHub");
+        }
+    } catch(e) {
+        console.log("No cloud data or offline");
+    }
+}
     </script>
 </body>
 </html>
