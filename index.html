@@ -7,26 +7,7 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap">
-
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
-    <script>
-        // --- Firebase Configuration ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyDbJLNxla_PuCgbLZzdQaLN8NLiLHwpPtM",
-            authDomain: "justcables-d4282.firebaseapp.com",
-            projectId: "justcables-d4282",
-            storageBucket: "justcables-d4282.firebasestorage.app",
-            messagingSenderId: "517016256204",
-            appId: "1:517016256204:web:3976befa1b81a753104c69",
-            measurementId: "G-H2SCM11XFM"
-        };
-
-        // Initialize Firebase Globally via Stable ES5 Syntax
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-    </script>
+    
 
     <style>
         :root { 
@@ -77,6 +58,7 @@
 
         canvas { background: white; border-radius: 8px; margin-top: 10px; width: 100%; height: 150px; touch-action: none; }
 
+        /* Stil avansat pentru cardurile din Vault */
         .record-card { 
             background: rgba(255,255,255,0.06); padding: 15px; border-radius: 10px; 
             margin-bottom: 12px; border-left: 5px solid var(--jc-yellow);
@@ -87,6 +69,7 @@
         .record-card p { margin: 3px 0; font-size: 0.8rem; color: #ddd; text-align: left; }
         .record-card .meta-type { font-size: 0.7rem; background: rgba(236, 201, 75, 0.2); color: var(--jc-yellow); padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 5px; font-weight: bold; }
 
+        /* Meniu Dropdown pentru Actiuni Directe */
         .dropdown-container { position: absolute; right: 15px; top: 15px; }
         .dropdown-btn { background: #333; color: var(--jc-yellow); border: 1px solid var(--jc-yellow); padding: 5px 10px; border-radius: 5px; font-size: 0.75rem; cursor: pointer; font-weight: bold; }
         
@@ -360,27 +343,27 @@
             db.push(data);
             localStorage.setItem(DB_KEY, JSON.stringify(db));
 
-            if (typeof database !== 'undefined' && database !== null) {
-                database.ref('records/' + data.id).set(data)
-                    .then(function() { console.log("Firebase sync complete."); })
-                    .catch(function(err) { console.error("Firebase sync failed:", err); });
-            }
-
             generatePDF(data);
             
             const subject = encodeURIComponent(`[JustCables Report] ${data.type} - ${data.biz}`);
             const body = encodeURIComponent(
-                `Dear Customer,\n\nPlease find attached the ${data.type} report at ${data.biz}.\n\n` +
-                `SUMMARY:\n- Date: ${data.date}\n- Engineer: Remus Ivasca\n- Work Status: ${data.status}\n- Total Amount: €${data.price}\n\n` +
+                `Dear Customer,\n\n` +
+                `Please find attached the ${data.type} report at ${data.biz}.\n\n` +
+                `SUMMARY:\n` +
+                `- Date: ${data.date}\n` +
+                `- Engineer: Remus Ivasca\n` +
+                `- Work Status: ${data.status}\n` +
+                `- Total Amount: €${data.price}\n\n` +
                 `TECHNICAL NOTES:\n${data.notes || 'No additional notes.'}\n\n` +
                 `If you have any questions, please contact justcables.support / justcables@outlook.com.\n\n` +
-                `Best regards,\nRemus Ivasca | JustCables`
+                `Best regards,\n` +
+                `Remus Ivasca | JustCables\n` +
+                `Dublin, Ireland | 00353 858130081`
             );
 
             const mailUrl = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
-            
-            if (window.cordova) {
-                window.open(mailUrl, '_system');
+            if (window.cordova && window.cordova.InAppBrowser) {
+                window.cordova.InAppBrowser.open(mailUrl, '_system');
             } else {
                 window.location.href = mailUrl;
             }
@@ -404,9 +387,9 @@
             doc.text("Remus Ivasca | Lead Engineer", 140, 25);
             doc.text("JustCables", 140, 30);
             doc.text("00353 858130081", 140, 35);
-            doc.text("justcables@outlook.com", 140, 40);
-            doc.text("www.justcables.support", 140, 45);
-            doc.text("Dublin | Ireland", 140, 50);
+            doc.text("justcables@outlook.com / remusivasca@outlook.com", 140, 40);
+            doc.text("www.justcables.support", 140, 40);
+            doc.text("Dublin | Ireland", 140, 45);
 
             doc.setTextColor(0, 0, 0);
             doc.setFontSize(16);
@@ -605,8 +588,8 @@
             );
 
             const mailUrl = `mailto:${targetEmail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
-            if (window.cordova) {
-                window.open(mailUrl, '_system');
+            if (window.cordova && window.cordova.InAppBrowser) {
+                window.cordova.InAppBrowser.open(mailUrl, '_system');
             } else {
                 window.location.href = mailUrl;
             }
@@ -625,14 +608,7 @@
             if (r) {
                 r.status = newStatus;
                 localStorage.setItem(DB_KEY, JSON.stringify(db));
-                
-                if (typeof database !== 'undefined' && database !== null) {
-                    database.ref('records/' + id + '/status').set(newStatus)
-                        .then(function() { renderVault(); })
-                        .catch(function(err) { console.error("Cloud Status Sync Failed: ", err); });
-                } else {
-                    renderVault();
-                }
+                renderVault(); 
             }
         }
 
@@ -647,7 +623,7 @@
 
         function checkForUpdates() {
             alert("Checking JustCables server for updates...");
-            const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
+        const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
             
             fetch(updateUrl, { cache: "no-store" })
                 .then(response => {
@@ -655,7 +631,7 @@
                     return response.text();
                 })
                 .then(htmlText => {
-                   if (htmlText.includes("v2.4.0")) {
+                   if (htmlText.includes("v2.0.0")) {
                         alert("You are running the latest version! (v2.3.0)");
                     } else {
                         if (confirm("New updates found (v2.3.0)! Do you want to apply them now?")) {
