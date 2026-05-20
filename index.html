@@ -7,6 +7,28 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap">
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <script>
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDbJLNxla_PuCgbLZzdQaLN8NLiLHwpPtM",
+            authDomain: "justcables-d4282.firebaseapp.com",
+            projectId: "justcables-d4282",
+            storageBucket: "justcables-d4282.firebasestorage.app",
+            messagingSenderId: "517016256204",
+            appId: "1:517016256204:web:3976befa1b81a753104c69",
+            measurementId: "G-H2SCM11XFM"
+        };
+
+        // Initialize Firebase Globally
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+    </script>
 
     <style>
         :root { 
