@@ -7,11 +7,9 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap">
 
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
     <script>
         // --- Firebase Configuration ---
@@ -25,7 +23,7 @@
             measurementId: "G-H2SCM11XFM"
         };
 
-        // Initialize Firebase Globally
+        // Initialize Firebase Globally via Stable ES5 Syntax
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
     </script>
@@ -79,7 +77,6 @@
 
         canvas { background: white; border-radius: 8px; margin-top: 10px; width: 100%; height: 150px; touch-action: none; }
 
-        /* Stil avansat pentru cardurile din Vault */
         .record-card { 
             background: rgba(255,255,255,0.06); padding: 15px; border-radius: 10px; 
             margin-bottom: 12px; border-left: 5px solid var(--jc-yellow);
@@ -90,7 +87,6 @@
         .record-card p { margin: 3px 0; font-size: 0.8rem; color: #ddd; text-align: left; }
         .record-card .meta-type { font-size: 0.7rem; background: rgba(236, 201, 75, 0.2); color: var(--jc-yellow); padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 5px; font-weight: bold; }
 
-        /* Meniu Dropdown pentru Actiuni Directe */
         .dropdown-container { position: absolute; right: 15px; top: 15px; }
         .dropdown-btn { background: #333; color: var(--jc-yellow); border: 1px solid var(--jc-yellow); padding: 5px 10px; border-radius: 5px; font-size: 0.75rem; cursor: pointer; font-weight: bold; }
         
@@ -339,153 +335,147 @@
             });
         }
 
-       function saveData() {
-    const biz = document.getElementById('bizName').value;
-    const mail = document.getElementById('clientMail').value;
-    const type = document.getElementById('formTitle').innerText;
+        function saveData() {
+            const biz = document.getElementById('bizName').value;
+            const mail = document.getElementById('clientMail').value;
+            const type = document.getElementById('formTitle').innerText;
 
-    if(!biz || !mail) return alert("Business Name and Email are required!");
+            if(!biz || !mail) return alert("Business Name and Email are required!");
 
-    const data = {
-        id: Date.now(), 
-        biz: biz, 
-        mail: mail, 
-        phone: document.getElementById('phone').value,
-        contact: document.getElementById('contactName').value, 
-        status: document.getElementById('workStatus').value,
-        price: document.getElementById('totalPrice').value, 
-        notes: document.getElementById('notes').value,
-        date: new Date().toLocaleString(), 
-        type: type,
-        sig: document.getElementById('sig-canvas').toDataURL()
-    };
+            const data = {
+                id: Date.now(), 
+                biz: biz, 
+                mail: mail, 
+                phone: document.getElementById('phone').value,
+                contact: document.getElementById('contactName').value, 
+                status: document.getElementById('workStatus').value,
+                price: document.getElementById('totalPrice').value, 
+                notes: document.getElementById('notes').value,
+                date: new Date().toLocaleString(), 
+                type: type,
+                sig: document.getElementById('sig-canvas').toDataURL()
+            };
 
-    // 1. Local Storage Backup
-    let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-    db.push(data);
-    localStorage.setItem(DB_KEY, JSON.stringify(db));
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            db.push(data);
+            localStorage.setItem(DB_KEY, JSON.stringify(db));
 
-    // 2. LIVE FIREBASE CLOUD STREAMING (Brings data directly to your dashboard console)
-    if (typeof database !== 'undefined') {
-        database.ref('records/' + data.id).set(data)
-            .then(() => console.log("Cloud streaming complete!"))
-            .catch(err => console.error("Firebase Sync Error: ", err));
-    }
-
-    // 3. Generate Report Documentation
-    generatePDF(data);
-    
-    // 4. Smart Email Handling (Detects Mobile vs Web)
-    const subject = encodeURIComponent(`[JustCables Report] ${data.type} - ${data.biz}`);
-    const body = encodeURIComponent(
-        `Dear Customer,\n\n Please find attached the ${data.type} report at ${data.biz}.\n\n` +
-        `SUMMARY:\n- Date: ${data.date}\n- Engineer: Remus Ivasca\n- Work Status: ${data.status}\n- Total Amount: €${data.price}\n\n` +
-        `TECHNICAL NOTES:\n${data.notes || 'No additional notes.'}\n\n` +
-        `If you have any questions, please contact justcables.support / justcables@outlook.com.\n\n` +
-        `Best regards,\nRemus Ivasca | JustCables`
-    );
-
-    const mailUrl = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
-    
-    if (window.cordova) {
-        // Safe execution context for Android Mobile App
-        window.open(mailUrl, '_system');
-    } else {
-        // Standard Web Browser Context
-        window.location.href = mailUrl;
-    }
-    showVault();
-}
-
-       function generatePDF(d) {
-    const doc = new jsPDF();
-    
-    doc.setFillColor(27, 46, 75); 
-    doc.rect(0, 0, 210, 55, 'F');
-
-    doc.setTextColor(236, 201, 75); 
-    doc.setFontSize(26);
-    doc.text("JUSTCABLES", 20, 30);
-    doc.setFontSize(10);
-    doc.text("Expert in cabling", 20, 38);
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(9);
-    doc.text("Remus Ivasca | Lead Engineer", 140, 25);
-    doc.text("JustCables", 140, 30);
-    doc.text("00353 858130081", 140, 35);
-    doc.text("justcables@outlook.com", 140, 40);
-    doc.text("www.justcables.support", 140, 45);
-    doc.text("Dublin | Ireland", 140, 50);
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(16);
-    doc.text(`${d.type.toUpperCase()}`, 20, 70);
-    
-    doc.setDrawColor(236, 201, 75);
-    doc.line(20, 75, 190, 75); 
-
-    doc.setFontSize(11);
-    doc.text(`BUSINESS: ${d.biz}`, 20, 85);
-    doc.text(`CONTACT: ${d.contact || 'N/A'}`, 20, 92);
-    doc.text(`EMAIL: ${d.mail}`, 20, 99);
-    doc.text(`DATE: ${d.date}`, 140, 85);
-
-    doc.setFontSize(12);
-    doc.text("TECHNICAL NOTES:", 20, 115);
-    doc.setFontSize(10);
-    doc.text(d.notes || "No notes provided.", 20, 122, {maxWidth: 170});
-
-    doc.setFontSize(14);
-    doc.text(`TOTAL AMOUNT: €${d.price}`, 20, 170);
-
-    if(d.sig) {
-        doc.setFontSize(10);
-        doc.text("Customer Signature:", 20, 190);
-        doc.addImage(d.sig, 'PNG', 20, 195, 60, 25);
-    }
-
-    const images = document.querySelectorAll('#jobSheetPreview img');
-    if (images.length > 0) {
-        doc.addPage(); 
-        doc.setFontSize(14);
-        doc.setTextColor(27, 46, 75);
-        doc.text("ATTACHED IMAGES / FIELD EVIDENCE", 20, 20);
-        
-        doc.setDrawColor(236, 201, 75);
-        doc.line(20, 23, 190, 23);
-        
-        let xOffset = 20;
-        let yOffset = 30;
-        
-        images.forEach((img, index) => {
-            doc.addImage(img.src, 'JPEG', xOffset, yOffset, 50, 50);
-            xOffset += 55; 
-            
-            if ((index + 1) % 3 === 0) {
-                xOffset = 20;
-                yOffset += 55;
+            if (typeof database !== 'undefined' && database !== null) {
+                database.ref('records/' + data.id).set(data)
+                    .then(function() { console.log("Firebase sync complete."); })
+                    .catch(function(err) { console.error("Firebase sync failed:", err); });
             }
+
+            generatePDF(data);
             
-            if (yOffset > 220 && (index + 1) < images.length) {
-                doc.addPage();
-                xOffset = 20;
-                yOffset = 30;
+            const subject = encodeURIComponent(`[JustCables Report] ${data.type} - ${data.biz}`);
+            const body = encodeURIComponent(
+                `Dear Customer,\n\nPlease find attached the ${data.type} report at ${data.biz}.\n\n` +
+                `SUMMARY:\n- Date: ${data.date}\n- Engineer: Remus Ivasca\n- Work Status: ${data.status}\n- Total Amount: €${data.price}\n\n` +
+                `TECHNICAL NOTES:\n${data.notes || 'No additional notes.'}\n\n` +
+                `If you have any questions, please contact justcables.support / justcables@outlook.com.\n\n` +
+                `Best regards,\nRemus Ivasca | JustCables`
+            );
+
+            const mailUrl = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
+            
+            if (window.cordova) {
+                window.open(mailUrl, '_system');
+            } else {
+                window.location.href = mailUrl;
             }
-        });
-    }
+            showVault();
+        }
 
-    doc.setFontSize(8);
-    doc.setTextColor(150);
-    doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
+        function generatePDF(d) {
+            const doc = new jsPDF();
+            
+            doc.setFillColor(27, 46, 75); 
+            doc.rect(0, 0, 210, 55, 'F');
 
-    if (window.cordova) {
-        const pdfOutput = doc.output('datauristring');
-        window.open(pdfOutput, '_system');
-    } else {
-        doc.save(`${d.biz}_Report.pdf`);
-    }
-}
+            doc.setTextColor(236, 201, 75); 
+            doc.setFontSize(26);
+            doc.text("JUSTCABLES", 20, 30);
+            doc.setFontSize(10);
+            doc.text("Expert in cabling", 20, 38);
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(9);
+            doc.text("Remus Ivasca | Lead Engineer", 140, 25);
+            doc.text("JustCables", 140, 30);
+            doc.text("00353 858130081", 140, 35);
+            doc.text("justcables@outlook.com", 140, 40);
+            doc.text("www.justcables.support", 140, 45);
+            doc.text("Dublin | Ireland", 140, 50);
+
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(16);
+            doc.text(`${d.type.toUpperCase()}`, 20, 70);
+            
+            doc.setDrawColor(236, 201, 75);
+            doc.line(20, 75, 190, 75); 
+
+            doc.setFontSize(11);
+            doc.text(`BUSINESS: ${d.biz}`, 20, 85);
+            doc.text(`CONTACT: ${d.contact || 'N/A'}`, 20, 92);
+            doc.text(`EMAIL: ${d.mail}`, 20, 99);
+            doc.text(`DATE: ${d.date}`, 140, 85);
+
+            doc.setFontSize(12);
+            doc.text("TECHNICAL NOTES:", 20, 115);
+            doc.setFontSize(10);
+            doc.text(d.notes || "No notes provided.", 20, 122, {maxWidth: 170});
+
+            doc.setFontSize(14);
+            doc.text(`TOTAL AMOUNT: €${d.price}`, 20, 170);
+
+            if(d.sig) {
+                doc.setFontSize(10);
+                doc.text("Customer Signature:", 20, 190);
+                doc.addImage(d.sig, 'PNG', 20, 195, 60, 25);
+            }
+
+            const images = document.querySelectorAll('#jobSheetPreview img');
+            if (images.length > 0) {
+                doc.addPage(); 
+                doc.setFontSize(14);
+                doc.setTextColor(27, 46, 75);
+                doc.text("ATTACHED IMAGES / FIELD EVIDENCE", 20, 20);
+                
+                doc.setDrawColor(236, 201, 75);
+                doc.line(20, 23, 190, 23);
+                
+                let xOffset = 20;
+                let yOffset = 30;
+                
+                images.forEach((img, index) => {
+                    doc.addImage(img.src, 'JPEG', xOffset, yOffset, 50, 50);
+                    xOffset += 55; 
+                    
+                    if ((index + 1) % 3 === 0) {
+                        xOffset = 20;
+                        yOffset += 55;
+                    }
+                    
+                    if (yOffset > 220 && (index + 1) < images.length) {
+                        doc.addPage();
+                        xOffset = 20;
+                        yOffset = 30;
+                    }
+                });
+            }
+
+            doc.setFontSize(8);
+            doc.setTextColor(150);
+            doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
+
+            if (window.cordova) {
+                const pdfOutput = doc.output('datauristring');
+                window.open(pdfOutput, '_system');
+            } else {
+                doc.save(`${d.biz}_Report.pdf`);
+            }
+        }
 
         function showVault() {
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
@@ -616,8 +606,8 @@
 
             const mailUrl = `mailto:${targetEmail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
             if (window.cordova) {
-    window.open(mailUrl, '_system');
-} else {
+                window.open(mailUrl, '_system');
+            } else {
                 window.location.href = mailUrl;
             }
         }
@@ -628,26 +618,23 @@
             if(r) generatePDF(r);
         }
 
-      function updateStatusInline(id, newStatus) {
-    let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-    let r = db.find(x => x.id === id);
-    
-    if (r) {
-        r.status = newStatus;
-        localStorage.setItem(DB_KEY, JSON.stringify(db));
-        
-        // Updates the record inside Firebase instantly
-        if (typeof database !== 'undefined') {
-            database.ref('records/' + id + '/status').set(newStatus)
-                .then(() => {
+        function updateStatusInline(id, newStatus) {
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            let r = db.find(x => x.id === id);
+            
+            if (r) {
+                r.status = newStatus;
+                localStorage.setItem(DB_KEY, JSON.stringify(db));
+                
+                if (typeof database !== 'undefined' && database !== null) {
+                    database.ref('records/' + id + '/status').set(newStatus)
+                        .then(function() { renderVault(); })
+                        .catch(function(err) { console.error("Cloud Status Sync Failed: ", err); });
+                } else {
                     renderVault();
-                })
-                .catch(err => console.error("Cloud Status Sync Failed: ", err));
-        } else {
-            renderVault();
+                }
+            }
         }
-    }
-}
 
         function purgeDeleted() {
             if(confirm("Permanently delete all records in this folder?")) {
@@ -660,7 +647,7 @@
 
         function checkForUpdates() {
             alert("Checking JustCables server for updates...");
-        const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
+            const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
             
             fetch(updateUrl, { cache: "no-store" })
                 .then(response => {
@@ -668,7 +655,7 @@
                     return response.text();
                 })
                 .then(htmlText => {
-                   if (htmlText.includes("v2.0.0")) {
+                   if (htmlText.includes("v2.4.0")) {
                         alert("You are running the latest version! (v2.3.0)");
                     } else {
                         if (confirm("New updates found (v2.3.0)! Do you want to apply them now?")) {
