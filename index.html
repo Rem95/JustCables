@@ -8,6 +8,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap">
 
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
     <style>
         :root { 
             --jc-yellow: #ecc94b; 
@@ -209,6 +212,21 @@
     </footer>
 
     <script>
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDbJLNxla_PuCgbLZzdQaLN8NLiLHwpPtM",
+            authDomain: "justcables-d4282.firebaseapp.com",
+            projectId: "justcables-d4282",
+            storageBucket: "justcables-d4282.firebasestorage.app",
+            messagingSenderId: "517016256204",
+            appId: "1:517016256204:web:3976befa1b81a753104c69",
+            measurementId: "G-H2SCM11XFM"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
         const { jsPDF } = window.jspdf;
         const DB_KEY = 'justcables_pro_db';
         let canvas, ctx, drawing = false, currentFilter = 'Ongoing';
@@ -338,9 +356,15 @@
                 sig: document.getElementById('sig-canvas').toDataURL()
             };
 
+            // 1. Save Locally (keeps local backup functional)
             let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
             db.push(data);
             localStorage.setItem(DB_KEY, JSON.stringify(db));
+
+            // 2. Stream to Live Firebase Cloud Database Realtime
+            database.ref('records/' + data.id).set(data)
+                .then(() => console.log("Successfully synced to Cloud Firebase!"))
+                .catch((error) => console.error("Firebase sync failure: ", error));
 
             generatePDF(data);
             
@@ -463,6 +487,24 @@
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('vaultSection').classList.remove('hidden');
             renderVault();
+        }
+
+        // Modified status modifier inline to mirror updates to Firebase live dashboard
+        function updateStatusInline(id, newStatus) {
+            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+            let r = db.find(x => x.id === id);
+            
+            if (r) {
+                r.status = newStatus;
+                localStorage.setItem(DB_KEY, JSON.stringify(db));
+                
+                // Mirror status modification directly to Cloud Realtime DB 
+                database.ref('records/' + id).update({ status: newStatus })
+                    .then(() => console.log("Cloud status synchronized successfully."))
+                    .catch(e => console.error("Cloud status update failed: ", e));
+
+                renderVault(); 
+            }
         }
 
         function setVaultFilter(f) { 
@@ -600,20 +642,16 @@
             if(r) generatePDF(r);
         }
 
-        function updateStatusInline(id, newStatus) {
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            let r = db.find(x => x.id === id);
-            
-            if (r) {
-                r.status = newStatus;
-                localStorage.setItem(DB_KEY, JSON.stringify(db));
-                renderVault(); 
-            }
-        }
-
         function purgeDeleted() {
             if(confirm("Permanently delete all records in this folder?")) {
                 let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+                
+                // Get all deleted ids to clean them out of Firebase too
+                let deletedRecords = db.filter(r => r.status === 'Deleted');
+                deletedRecords.forEach(r => {
+                    database.ref('records/' + r.id).remove();
+                });
+
                 db = db.filter(r => r.status !== 'Deleted');
                 localStorage.setItem(DB_KEY, JSON.stringify(db));
                 renderVault();
@@ -622,7 +660,7 @@
 
         function checkForUpdates() {
             alert("Checking JustCables server for updates...");
-        const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
+            const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
             
             fetch(updateUrl, { cache: "no-store" })
                 .then(response => {
