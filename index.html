@@ -372,9 +372,13 @@
 
         function generatePDF(d) {
             const doc = new jsPDF();
-            
+            const pageHeight = doc.internal.pageSize.height; // 297mm (A4 standard)
+            const margin = 20;
+            let yCursor = 55; // Tracks vertical position dynamically
+
+            // --- HEADER BLOCK ---
             doc.setFillColor(27, 46, 75); 
-            doc.rect(0, 0, 210, 55, 'F');
+            doc.rect(0, 0, 210, yCursor, 'F');
 
             doc.setTextColor(236, 201, 75); 
             doc.setFontSize(26);
@@ -388,36 +392,75 @@
             doc.text("JustCables", 140, 30);
             doc.text("00353 858130081", 140, 35);
             doc.text("justcables@outlook.com / remusivasca@outlook.com", 140, 40);
-            doc.text("www.justcables.support", 140, 40);
             doc.text("Dublin | Ireland", 140, 45);
 
+            // --- CLIENT METADATA ---
             doc.setTextColor(0, 0, 0);
             doc.setFontSize(16);
-            doc.text(`${d.type.toUpperCase()}`, 20, 70);
+            yCursor += 15; // 70
+            doc.text(`${d.type.toUpperCase()}`, 20, yCursor);
             
             doc.setDrawColor(236, 201, 75);
-            doc.line(20, 75, 190, 75); 
+            yCursor += 5; // 75
+            doc.line(20, yCursor, 190, yCursor); 
 
             doc.setFontSize(11);
-            doc.text(`BUSINESS: ${d.biz}`, 20, 85);
-            doc.text(`CONTACT: ${d.contact || 'N/A'}`, 20, 92);
-            doc.text(`EMAIL: ${d.mail}`, 20, 99);
-            doc.text(`DATE: ${d.date}`, 140, 85);
+            yCursor += 10; // 85
+            doc.text(`BUSINESS: ${d.biz}`, 20, yCursor);
+            doc.text(`DATE: ${d.date}`, 140, yCursor);
+            
+            yCursor += 7; // 92
+            doc.text(`CONTACT: ${d.contact || 'N/A'}`, 20, yCursor);
+            
+            yCursor += 7; // 99
+            doc.text(`EMAIL: ${d.mail}`, 20, yCursor);
 
+            // --- DYNAMIC TECHNICAL NOTES PAGINATION ---
             doc.setFontSize(12);
-            doc.text("TECHNICAL NOTES:", 20, 115);
+            yCursor += 16; // 115
+            doc.text("TECHNICAL NOTES:", 20, yCursor);
+            
             doc.setFontSize(10);
-            doc.text(d.notes || "No notes provided.", 20, 122, {maxWidth: 170});
+            yCursor += 7; // 122
 
+            // Break up technical notes into single array lines fitting page width
+            const splitNotes = doc.splitTextToSize(d.notes || "No notes provided.", 170);
+            
+            splitNotes.forEach((line) => {
+                // If line exceeds printable area (leaving 25mm space for bottom margin), break page
+                if (yCursor + 7 > pageHeight - 25) {
+                    doc.addPage();
+                    yCursor = 25; // Reset cursor back to the top of the brand new page
+                }
+                doc.text(line, margin, yCursor);
+                yCursor += 6; // Standard line spacing height
+            });
+
+            // --- BILLING SECTION ---
+            // Verify if billing block has enough remaining layout room on current page
+            if (yCursor + 20 > pageHeight - 25) {
+                doc.addPage();
+                yCursor = 25;
+            }
+            
+            yCursor += 12;
             doc.setFontSize(14);
-            doc.text(`TOTAL AMOUNT: €${d.price}`, 20, 170);
+            doc.text(`TOTAL AMOUNT: €${d.price}`, 20, yCursor);
 
+            // --- SIGNATURE SECTION ---
             if(d.sig) {
+                if (yCursor + 40 > pageHeight - 25) {
+                    doc.addPage();
+                    yCursor = 25;
+                }
+                yCursor += 15;
                 doc.setFontSize(10);
-                doc.text("Customer Signature:", 20, 190);
-                doc.addImage(d.sig, 'PNG', 20, 195, 60, 25);
+                doc.text("Customer Signature:", 20, yCursor);
+                doc.addImage(d.sig, 'PNG', 20, yCursor + 5, 60, 25);
+                yCursor += 30;
             }
 
+            // --- IMAGES SECTION ---
             const images = document.querySelectorAll('#jobSheetPreview img');
             if (images.length > 0) {
                 doc.addPage(); 
@@ -448,6 +491,8 @@
                 });
             }
 
+            // --- FOOTER NOTE ---
+            // Standard placement logic to check space for footer certification
             doc.setFontSize(8);
             doc.setTextColor(150);
             doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
