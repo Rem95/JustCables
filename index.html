@@ -245,22 +245,51 @@
             p.type = p.type === "password" ? "text" : "password";
         }
 
-        function checkLogin() {
-            const u = document.getElementById('username').value;
-            const p = document.getElementById('password').value;
-            if(u === "JustCables" && p === "JustC@bles!") {
-                if(document.getElementById('rememberMe').checked) {
-                    localStorage.setItem('jc_user', u);
-                    localStorage.setItem('jc_pass', p);
-                } else {
-                    localStorage.removeItem('jc_user');
-                    localStorage.removeItem('jc_pass');
-                }
-                showDashboard();
-            } else {
-                document.getElementById('loginError').style.display = "block";
-            }
+        let userRole = 'guest'; 
+
+function checkLogin() {
+    const u = document.getElementById('username').value;
+    const p = document.getElementById('password').value;
+    
+    // 1. Master Admin Account
+    if (u === "JustCables" && p === "JustC@bles!") {
+        userRole = 'admin';
+        if (document.getElementById('rememberMe').checked) {
+            localStorage.setItem('jc_user', u);
+            localStorage.setItem('jc_pass', p);
         }
+        showDashboard();
+        applyPermissions(); 
+    } 
+    // 2. Custom Guest Account
+    else if (u === "JustCablesGuest" && p === "JustCablesGuest1!") {
+        userRole = 'guest';
+        showDashboard();
+        applyPermissions(); 
+    } 
+    // 3. Error Handler
+    else {
+        document.getElementById('loginError').style.display = "block";
+    }
+}
+
+// Drops dashboard visibility privileges depending on who is logged in
+function applyPermissions() {
+    const vaultBtn = document.querySelector("button[onclick='showVault()']");
+    const syncBtn = document.getElementById('syncBtn');
+    const updateGrid = document.querySelector(".grid-2"); 
+
+    if (userRole === 'guest') {
+        if (vaultBtn) vaultBtn.style.display = 'none';
+        if (syncBtn) syncBtn.style.display = 'none';
+        if (updateGrid) updateGrid.style.display = 'none';
+        document.querySelector('#dashboardSection h1').innerText = "JustCables Portal";
+    } else {
+        if (vaultBtn) vaultBtn.style.display = 'block';
+        if (updateGrid) updateGrid.style.display = 'grid';
+        document.querySelector('#dashboardSection h1').innerText = "JustCables CRM";
+    }
+}
 
         function logout() { location.reload(); }
 
