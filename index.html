@@ -5,86 +5,217 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JustCables Enterprise CRM</title>
     
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Configurația ta oficială Firebase completă
+        const firebaseConfig = {
+            apiKey: "AIzaSyDbJLNxlA_PuCgBLZzdQaLN8NLilHwpPtM",
+            authDomain: "justcables-d4282.firebaseapp.com",
+            databaseURL: "https://justcables-d4282-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "justcables-d4282",
+            storageBucket: "justcables-d4282.firebasestorage.app",
+            messagingSenderId: "517016256204",
+            appId: "1:517016256204:web:3976befa1b81a753104c69",
+            measurementId: "G-H2SCM11XFW"
+        };
+
+        // Inițializare servicii Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Mapare pe obiectul window pentru apelare directă din HTML (onclick)
+        window.handleLogin = handleLogin;
+        window.handleRegister = handleRegister;
+        window.handleLogout = handleLogout;
+        window.saveDataOnline = saveDataOnline;
+        window.loadManagerVault = loadManagerVault;
+
+        let currentUserData = null;
+
+        // Monitorizare sesiune User (Logat / Delocat)
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                const docRef = doc(db, "users", user.uid);
+                const docSnap = await getDoc(docRef);
+                
+                if (docSnap.exists()) {
+                    currentUserData = docSnap.data();
+                    currentUserData.uid = user.uid;
+                    
+                    // Schimbă titlul dashboard-ului cu numele companiei sale
+                    document.getElementById('companyDashboardTitle').innerText = currentUserData.companyName.toUpperCase();
+                    
+                    showDashboard();
+                    applyPermissions();
+                }
+            } else {
+                currentUserData = null;
+                document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
+                document.getElementById('loginSection').classList.remove('hidden');
+            }
+        });
+
+        // Autentificare cont existent
+        async function handleLogin() {
+            const email = document.getElementById('loginEmail').value;
+            const pass = document.getElementById('loginPassword').value;
+            const errDiv = document.getElementById('loginError');
+            errDiv.style.display = "none";
+
+            if (!email || !pass) return alert("Please fill in all fields!");
+
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+            } catch (error) {
+                errDiv.innerText = "Error: " + error.message;
+                errDiv.style.display = "block";
+            }
+        }
+
+        // Creare cont nou (Înregistrare tip Facebook)
+        async function handleRegister() {
+            const email = document.getElementById('regEmail').value;
+            const pass = document.getElementById('regPassword').value;
+            const compName = document.getElementById('regCompanyName').value;
+            const regErr = document.getElementById('regError');
+            regErr.style.display = "none";
+
+            if(!email || !pass || !compName) return alert("All fields are required!");
+
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+                const user = userCredential.user;
+
+                // Alocare automată rol de Manager pentru conturile tale principale
+                let role = "client";
+                if(email.toLowerCase() === "justcables@outlook.com" || email.toLowerCase() === "ivascaremus@gmail.com") {
+                    role = "manager";
+                }
+
+                // Salvare profil companie în Cloud Firestore
+                await setDoc(doc(db, "users", user.uid), {
+                    email: email,
+                    companyName: compName,
+                    role: role,
+                    createdAt: new Date().toISOString()
+                });
+
+                alert("Account created successfully!");
+                toggleAuthScreens();
+            } catch (error) {
+                regErr.innerText = "Registration Error: " + error.message;
+                regErr.style.display = "block";
+            }
+        }
+
+        // Delogare
+        async function handleLogout() {
+            await signOut(auth);
+            location.reload();
+        }
+
+        // Drepturi de vizualizare (Manager vs Utilizator normal)
+        function applyPermissions() {
+            const managerSection = document.getElementById('managerSection');
+            
+            if (currentUserData && currentUserData.role === 'manager') {
+                document.getElementById('companyDashboardTitle').innerText = "JUSTCABLES CRM (MANAGER)";
+                if (managerSection) managerSection.style.removeProperty('display');
+            } else {
+                if (managerSection) managerSection.style.display = 'none';
+            }
+        }
+
+        // Salvare raport direct în Cloud Database
+        async function saveDataOnline() {
+            const biz = document.getElementById('bizName').value;
+            const mail = document.getElementById('clientMail').value;
+            const type = document.getElementById('formTitle').innerText;
+
+            if(!biz || !mail) return alert("Business Name and Email are required!");
+
+            const dataReport = {
+                uid: currentUserData.uid,
+                createdByCompany: currentUserData.companyName,
+                biz: biz,
+                mail: mail,
+                phone: document.getElementById('phone').value,
+                contact: document.getElementById('contactName').value,
+                status: document.getElementById('workStatus').value,
+                price: document.getElementById('totalPrice').value,
+                notes: document.getElementById('notes').value,
+                date: new Date().toLocaleString(),
+                type: type,
+                sig: document.getElementById('sig-canvas').toDataURL()
+            };
+
+            try {
+                await addDoc(collection(db, "reports"), dataReport);
+                alert("Report synced directly to Cloud Server!");
+                generatePDF(dataReport);
+                showDashboard();
+            } catch (e) {
+                alert("Sync failed: " + e.message);
+            }
+        }
+
+        // Panou Centralizat de Control Manager (Tu vezi tot de la toți clienții)
+        async function loadManagerVault() {
+            if(currentUserData.role !== 'manager') return alert("Access denied!");
+            
+            const listDiv = document.getElementById('managerVaultList');
+            listDiv.innerHTML = "Fetching global records from secure server...";
+
+            try {
+                const querySnapshot = await getDocs(collection(db, "reports"));
+                listDiv.innerHTML = "";
+                
+                if (querySnapshot.empty) {
+                    listDiv.innerHTML = "<p style='text-align:center; color:#888;'>No records discovered in cloud network.</p>";
+                    return;
+                }
+
+                querySnapshot.forEach((doc) => {
+                    const r = doc.data();
+                    const card = document.createElement('div');
+                    card.className = 'record-card';
+                    card.innerHTML = `
+                        <h4>${r.biz}</h4>
+                        <p><strong>CREATOR COMPANY:</strong> ${r.createdByCompany.toUpperCase()}</p>
+                        <p><strong>Contact:</strong> ${r.contact || 'N/A'} | <strong>Phone:</strong> ${r.phone || 'N/A'}</p>
+                        <p><strong>Email:</strong> ${r.mail} | <strong>Date:</strong> ${r.date}</p>
+                        <p><strong>Total Amount:</strong> €${r.price || '0'} [${r.status}]</p>
+                        <p style="font-size: 0.75rem; color: #ccc; margin-top: 5px; background: rgba(0,0,0,0.2); padding: 5px; border-radius:4px;"><strong>Notes:</strong> ${r.notes}</p>
+                    `;
+                    listDiv.appendChild(card);
+                });
+            } catch (err) {
+                listDiv.innerHTML = "Download failure: " + err.message;
+            }
+        }
+    </script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap">
     
-
     <style>
-        :root { 
-            --jc-yellow: #ecc94b; 
-            --jc-blue: #0056b3; 
-            --dark-overlay: rgba(13, 20, 31, 0.9); 
-        }
-
-        body { 
-            font-family: 'Montserrat', sans-serif; 
-            margin: 0; padding: 0; color: white; background-color: #000; 
-            overflow-x: hidden;
-        }
-
-        #bgVideo {
-            position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
-            z-index: -1; object-fit: cover; opacity: 0.5;
-        }
-
-        .app-container { 
-            max-width: 600px; margin: 30px auto; padding: 25px; 
-            background: var(--dark-overlay); border-radius: 15px; 
-            border: 1px solid var(--jc-yellow); backdrop-filter: blur(10px);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
-        }
-
+        :root { --jc-yellow: #ecc94b; --jc-blue: #0056b3; --dark-overlay: rgba(13, 20, 31, 0.9); }
+        body { font-family: 'Montserrat', sans-serif; margin: 0; padding: 0; color: white; background-color: #000; overflow-x: hidden; }
+        #bgVideo { position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%; z-index: -1; object-fit: cover; opacity: 0.5; }
+        .app-container { max-width: 600px; margin: 30px auto; padding: 25px; background: var(--dark-overlay); border-radius: 15px; border: 1px solid var(--jc-yellow); backdrop-filter: blur(10px); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8); }
         .hidden { display: none !important; }
-
         label { font-size: 0.75rem; color: var(--jc-yellow); margin-top: 12px; display: block; font-weight: bold; text-transform: uppercase; }
-        
-        input, select, textarea { 
-            width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: none; 
-            background: rgba(255, 255, 255, 0.9); color: #222; box-sizing: border-box; font-weight: 600;
-        }
-
-        button { 
-            width: 100%; padding: 14px; margin-top: 15px; border-radius: 10px; border: none; 
-            font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.3s;
-        }
-        
+        input, select, textarea { width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: none; background: rgba(255, 255, 255, 0.9); color: #222; box-sizing: border-box; font-weight: 600; }
+        button { width: 100%; padding: 14px; margin-top: 15px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.3s; }
         .btn-main { background-color: var(--jc-yellow); color: #000; letter-spacing: 1px; }
-        .btn-sync { background-color: #28a745; color: white; margin-bottom: 10px; }
-
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-        .tab-btn { flex: 1; padding: 10px; text-align: center; background: rgba(255,255,255,0.1); cursor: pointer; border-radius: 8px; font-size: 0.7rem; }
-        .tab-btn.active { background: var(--jc-yellow); color: #000; font-weight: bold; }
-
-        canvas { background: white; border-radius: 8px; margin-top: 10px; width: 100%; height: 150px; touch-action: none; }
-
-        /* Stil avansat pentru cardurile din Vault */
-        .record-card { 
-            background: rgba(255,255,255,0.06); padding: 15px; border-radius: 10px; 
-            margin-bottom: 12px; border-left: 5px solid var(--jc-yellow);
-            position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            text-align: left;
-        }
+        .record-card { background: rgba(255,255,255,0.06); padding: 15px; border-radius: 10px; margin-bottom: 12px; border-left: 5px solid var(--jc-yellow); text-align: left; }
         .record-card h4 { margin: 0 0 5px 0; color: var(--jc-yellow); font-size: 1rem; }
-        .record-card p { margin: 3px 0; font-size: 0.8rem; color: #ddd; text-align: left; }
-        .record-card .meta-type { font-size: 0.7rem; background: rgba(236, 201, 75, 0.2); color: var(--jc-yellow); padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 5px; font-weight: bold; }
-
-        /* Meniu Dropdown pentru Actiuni Directe */
-        .dropdown-container { position: absolute; right: 15px; top: 15px; }
-        .dropdown-btn { background: #333; color: var(--jc-yellow); border: 1px solid var(--jc-yellow); padding: 5px 10px; border-radius: 5px; font-size: 0.75rem; cursor: pointer; font-weight: bold; }
-        
-        .dropdown-content { 
-            display: none; position: absolute; right: 0; background: #1a2636; 
-            min-width: 175px; box-shadow: 0px 8px 16px rgba(0,0,0,0.5); z-index: 10; 
-            border-radius: 6px; border: 1px solid rgba(236, 201, 75, 0.4); overflow: hidden;
-        }
-        .dropdown-content button { 
-            width: 100%; padding: 10px; margin: 0; text-align: left; background: transparent; 
-            color: white; font-size: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.05); border-radius: 0; border: none;
-        }
-        .dropdown-content button:hover { background: var(--jc-yellow); color: black; }
-        .show-menu { display: block !important; }
-
+        .record-card p { margin: 3px 0; font-size: 0.8rem; color: #ddd; }
+        canvas { background: white; border-radius: 8px; margin-top: 10px; width: 100%; height: 150px; touch-action: none; }
         footer { text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,0,0,0.8); border-top: 1px solid var(--jc-yellow); font-size: 12px; }
     </style>
 </head>
@@ -98,200 +229,103 @@
         <img src="icon.png" style="width: 100px; display: block; margin: 0 auto 10px;">
         <h2 style="text-align:center; color:var(--jc-yellow); letter-spacing: 2px;">SECURE ACCESS</h2>
         
-        <label>Username</label>
-        <input type="text" id="username" placeholder="JustCables ID">
-        
-        <label>Password</label>
-        <input type="password" id="password" placeholder="••••••••">
-        
-        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 15px;">
-            <label style="display: flex; align-items: center; gap: 10px; text-transform: none; cursor: pointer;">
-                <input type="checkbox" id="showPass" onclick="togglePass()" style="width: 18px;"> Show Password
-            </label>
-            <label style="display: flex; align-items: center; gap: 10px; text-transform: none; cursor: pointer;">
-                <input type="checkbox" id="rememberMe" style="width: 18px;"> Remember Me
-            </label>
+        <div id="authLoginFields">
+            <label>Email Address</label>
+            <input type="email" id="loginEmail" placeholder="manager@company.com">
+            
+            <label>Password</label>
+            <input type="password" id="loginPassword" placeholder="••••••••">
+            
+            <button class="btn-main" onclick="handleLogin()">Sign In</button>
+            <p style="text-align:center; font-size:0.8rem; margin-top:15px; cursor:pointer; color:var(--jc-yellow);" onclick="toggleAuthScreens()">Don't have an account? Register here</p>
+            <div id="loginError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold;"></div>
         </div>
 
-        <button class="btn-main" onclick="checkLogin()">Authorize</button>
-        <div id="loginError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold;">Access Denied!</div>
+        <div id="authRegisterFields" class="hidden">
+            <h3 style="text-align: center; color: var(--jc-yellow); font-size:1rem;">CREATE BUSINESS CONTAINER</h3>
+            
+            <label>Company/Personal Display Name *</label>
+            <input type="text" id="regCompanyName" placeholder="e.g. JustCables.ie ">
+
+            <label>Email Address *</label>
+            <input type="email" id="regEmail" placeholder="yourname@domain.com">
+            
+            <label>Password *</label>
+            <input type="password" id="regPassword" placeholder="Minimum 6 characters">
+            
+            <button class="btn-main" style="background-color: #28a745; color: white;" onclick="handleRegister()">Create Account</button>
+            <p style="text-align:center; font-size:0.8rem; margin-top:15px; cursor:pointer; color: #fff;" onclick="toggleAuthScreens()">Cancel and go back</p>
+            <div id="regError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold;"></div>
+        </div>
     </div>
 
     <div id="dashboardSection" class="app-container hidden">
-        <h1 style="text-align:center; color:var(--jc-yellow);">JustCables CRM </h1>
-        <button id="syncBtn" class="btn-sync" style="display:none;" onclick="manualSync()">Sync Pending Data</button>
+        <h1 id="companyDashboardTitle" style="text-align:center; color:var(--jc-yellow);">JUSTCABLES</h1>
+        
         <button class="btn-main" onclick="openForm('Site Survey')">New Site Survey</button>
         <button class="btn-main" onclick="openForm('Job Sheet')">New Job Sheet</button>
         <button class="btn-main" onclick="openForm('Maintenance')">New Maintenance</button>
-        <button style="background:#444; color:white;" onclick="showVault()">Records Vault</button>
-
-        <div class="grid-2" style="margin-top: 15px;">
-            <button type="button" 
-                    style="background: transparent; color: white; border: 1px solid var(--jc-yellow); font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
-                    onclick="checkForUpdates()">
-                SYNC UPDATE
-            </button>
-            
-            <button type="button" 
-                    style="background: #28a745; color: white; font-size: 0.65rem; padding: 10px; margin-top: 0; letter-spacing: 0.5px;" 
-                    onclick="downloadLatestAPK()">
-                DOWNLOAD APK
-            </button>
+        
+        <div id="managerSection" style="display:none; margin-top:20px; border-top:1px dashed var(--jc-yellow); padding-top:15px;">
+            <h3 style="color:var(--jc-yellow); text-align:center; font-size:0.9rem;">🛡️ APP MANAGER HUB</h3>
+            <button style="background:#0056b3; color:white;" onclick="showVault()">Open Global Records Vault</button>
         </div>
 
-        <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="logout()">Logout</button>
+        <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="handleLogout()">Logout</button>
     </div>
 
     <div id="formSection" class="app-container hidden">
         <h2 id="formTitle" style="text-align:center; color:var(--jc-yellow);">FORM</h2>
         
-        <div class="grid-2">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
             <div><label>Business Name *</label><input type="text" id="bizName"></div>
             <div><label>Client Email *</label><input type="email" id="clientMail"></div>
         </div>
-        
-        <div class="grid-2">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
             <div><label>Contact Person</label><input type="text" id="contactName"></div>
             <div><label>Phone Number</label><input type="tel" id="phone"></div>
         </div>
-
-        <div class="grid-2">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
             <div>
                 <label>Work Status</label>
                 <select id="workStatus">
                     <option value="Ongoing">Ongoing</option>
                     <option value="Complete">Complete</option>
-                    <option value="Invalid">Invalid</option>
                 </select>
             </div>
             <div><label>Final Price (€)</label><input type="number" id="totalPrice"></div>
         </div>
-
+        
         <label>Technical Notes</label>
         <textarea id="notes" rows="4"></textarea>
         
-        <label>ATTACH IMAGES / TAKE PHOTOS</label>
-        <input type="file" id="jobSheetPhotos" accept="image/*" multiple style="background:#fff; color:#000; padding:10px; margin-bottom:15px; border-radius:5px; width:100%;">
-        <div id="jobSheetPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;"></div>
-
         <label>Customer Signature</label>
         <canvas id="sig-canvas"></canvas>
         <button type="button" style="background:#333; color:var(--jc-yellow); font-size:0.7rem; padding:8px; margin-top:5px; border:1px solid var(--jc-yellow);" onclick="clearSignature()">Clear Signature</button>
 
-        <div class="grid-2">
-            <button class="btn-main" onclick="saveData()">Save & Export</button>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:15px;">
+            <button class="btn-main" onclick="saveDataOnline()">Save & Cloud Sync</button>
             <button style="background:transparent; border:1px solid white; color:white;" onclick="showDashboard()">Back</button>
         </div>
     </div>
 
     <div id="vaultSection" class="app-container hidden">
-        <h2 style="text-align:center; color:var(--jc-yellow); margin-bottom: 5px;">Records Vault</h2>
-        
-        <div style="margin-bottom: 15px;">
-            <input type="text" id="vaultSearch" placeholder="🔍 Search business, phone, email, notes..." oninput="renderVault()" style="background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(236, 201, 75, 0.3); padding: 10px;">
-        </div>
-
-        <div class="grid-2" style="margin-bottom:15px; gap: 8px;">
-            <div id="vOngoing" class="tab-btn active" onclick="setVaultFilter('Ongoing')">Ongoing</div>
-            <div id="vComplete" class="tab-btn" onclick="setVaultFilter('Complete')">Complete</div>
-            <div id="vInvalid" class="tab-btn" onclick="setVaultFilter('Invalid')">Invalid</div>
-            <div id="vDeleted" class="tab-btn" onclick="setVaultFilter('Deleted')" style="color:#ff4d4d;">Deleted</div>
-        </div>
-
-        <div id="vaultList" style="max-height: 400px; overflow-y: auto; margin-bottom: 15px; padding-right: 5px;"></div>
-        
-        <button id="purgeBtn" style="background:#dc3545; color:white; display:none; margin-top: 5px;" onclick="purgeDeleted()">Purge All Deleted</button>
+        <h2 style="text-align:center; color:var(--jc-yellow); margin-bottom:15px;">Central Database Node</h2>
+        <div id="managerVaultList" style="max-height: 400px; overflow-y: auto; margin-bottom:15px; padding-right:5px;"></div>
         <button class="btn-main" onclick="showDashboard()">Back to Dashboard</button>
     </div>
 
     <footer>
-        <p>Managed by <strong>JustCables</strong></p>
-        <p>www.justcables.support / justcables@outlook.com</p>
+        <p>System Powered by <strong>JustCables Cloud Enterprise</strong></p>
     </footer>
 
     <script>
-        const { jsPDF } = window.jspdf;
-        const DB_KEY = 'justcables_pro_db';
-        let canvas, ctx, drawing = false, currentFilter = 'Ongoing';
+        let canvas, ctx, drawing = false;
 
-        window.onload = function() {
-            const cachedCode = localStorage.getItem('cached_app_code');
-            
-            if (cachedCode && !window.location.search.includes('bypass_cache=1')) {
-                document.open();
-                document.write(cachedCode);
-                document.close();
-                
-                if (!window.location.search.includes('updated=')) {
-                    window.location.href = window.location.href.split('?')[0] + "?updated=" + Date.now() + "&bypass_cache=1";
-                }
-                return;
-            }
-
-            const savedUser = localStorage.getItem('jc_user');
-            const savedPass = localStorage.getItem('jc_pass');
-            if(savedUser && savedPass) {
-                document.getElementById('username').value = savedUser;
-                document.getElementById('password').value = savedPass;
-                document.getElementById('rememberMe').checked = true;
-            }
-            
-            initCanvas();
-            setupPhotoPreview('jobSheetPhotos', 'jobSheetPreview');
-        };
-
-        function togglePass() {
-            const p = document.getElementById('password');
-            p.type = p.type === "password" ? "text" : "password";
+        function toggleAuthScreens() {
+            document.getElementById('authLoginFields').classList.toggle('hidden');
+            document.getElementById('authRegisterFields').classList.toggle('hidden');
         }
-
-        let userRole = 'guest'; 
-
-function checkLogin() {
-    const u = document.getElementById('username').value;
-    const p = document.getElementById('password').value;
-    
-    // 1. Master Admin Account
-    if (u === "JustCables" && p === "JustC@bles!") {
-        userRole = 'admin';
-        if (document.getElementById('rememberMe').checked) {
-            localStorage.setItem('jc_user', u);
-            localStorage.setItem('jc_pass', p);
-        }
-        showDashboard();
-        applyPermissions(); 
-    } 
-    // 2. Custom Guest Account
-    else if (u === "JustCablesGuest" && p === "JustCablesGuest1!") {
-        userRole = 'guest';
-        showDashboard();
-        applyPermissions(); 
-    } 
-    // 3. Error Handler
-    else {
-        document.getElementById('loginError').style.display = "block";
-    }
-}
-
-// Drops dashboard visibility privileges depending on who is logged in
-function applyPermissions() {
-    const vaultBtn = document.querySelector("button[onclick='showVault()']");
-    const syncBtn = document.getElementById('syncBtn');
-    const updateGrid = document.querySelector(".grid-2"); 
-
-    if (userRole === 'guest') {
-        if (vaultBtn) vaultBtn.style.display = 'none';
-        if (syncBtn) syncBtn.style.display = 'none';
-        if (updateGrid) updateGrid.style.display = 'none';
-        document.querySelector('#dashboardSection h1').innerText = "JustCables Portal";
-    } else {
-        if (vaultBtn) vaultBtn.style.display = 'block';
-        if (updateGrid) updateGrid.style.display = 'grid';
-        document.querySelector('#dashboardSection h1').innerText = "JustCables CRM";
-    }
-}
-
-        function logout() { location.reload(); }
 
         function showDashboard() {
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
@@ -299,10 +333,24 @@ function applyPermissions() {
         }
 
         function openForm(t) {
-            clearFormFields();
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('formSection').classList.remove('hidden');
             document.getElementById('formTitle').innerText = t;
+            
+            document.getElementById('bizName').value = '';
+            document.getElementById('clientMail').value = '';
+            document.getElementById('contactName').value = '';
+            document.getElementById('phone').value = '';
+            document.getElementById('totalPrice').value = '';
+            document.getElementById('notes').value = '';
+            
+            initCanvas();
+        }
+
+        function showVault() {
+            document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
+            document.getElementById('vaultSection').classList.remove('hidden');
+            loadManagerVault();
         }
 
         function initCanvas() {
@@ -321,437 +369,59 @@ function applyPermissions() {
 
         function clearSignature() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
 
-        function setupPhotoPreview(inputId, previewId) {
-            const input = document.getElementById(inputId);
-            const preview = document.getElementById(previewId);
-            if (!input || !preview) return;
-
-            input.addEventListener('change', function() {
-                preview.innerHTML = ''; 
-                if (this.files) {
-                    Array.from(this.files).forEach(file => {
-                        const reader = new FileReader();
-                        reader.onload = function(e) {
-                            const img = document.createElement('img');
-                            img.src = e.target.result;
-                            img.style.width = '70px';
-                            img.style.height = '70px';
-                            img.style.objectFit = 'cover';
-                            img.style.borderRadius = '5px';
-                            img.style.border = '1px solid var(--jc-yellow)';
-                            preview.appendChild(img);
-                        }
-                        reader.readAsDataURL(file);
-                    });
-                }
-            });
-        }
-
-        function saveData() {
-            const biz = document.getElementById('bizName').value;
-            const mail = document.getElementById('clientMail').value;
-            const type = document.getElementById('formTitle').innerText;
-
-            if(!biz || !mail) return alert("Business Name and Email are required!");
-
-            const data = {
-                id: Date.now(), 
-                biz: biz, 
-                mail: mail, 
-                phone: document.getElementById('phone').value,
-                contact: document.getElementById('contactName').value, 
-                status: document.getElementById('workStatus').value,
-                price: document.getElementById('totalPrice').value, 
-                notes: document.getElementById('notes').value,
-                date: new Date().toLocaleString(), 
-                type: type,
-                sig: document.getElementById('sig-canvas').toDataURL()
-            };
-
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            db.push(data);
-            localStorage.setItem(DB_KEY, JSON.stringify(db));
-
-            generatePDF(data);
-            
-            const subject = encodeURIComponent(`[JustCables Report] ${data.type} - ${data.biz}`);
-            const body = encodeURIComponent(
-                `Dear Customer,\n\n` +
-                `Please find attached the ${data.type} report at ${data.biz}.\n\n` +
-                `SUMMARY:\n` +
-                `- Date: ${data.date}\n` +
-                `- Engineer: Remus Ivasca\n` +
-                `- Work Status: ${data.status}\n` +
-                `- Total Amount: €${data.price}\n\n` +
-                `TECHNICAL NOTES:\n${data.notes || 'No additional notes.'}\n\n` +
-                `If you have any questions, please contact justcables.support / justcables@outlook.com.\n\n` +
-                `Best regards,\n` +
-                `Remus Ivasca | JustCables\n` +
-                `Dublin, Ireland | 00353 858130081`
-            );
-
-            const mailUrl = `mailto:${data.mail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
-            if (window.cordova && window.cordova.InAppBrowser) {
-                window.cordova.InAppBrowser.open(mailUrl, '_system');
-            } else {
-                window.location.href = mailUrl;
-            }
-            showVault();
-        }
-
+        // GENERARE PDF CU COMPANIE CREATOARE METADATA DINAMICĂ
         function generatePDF(d) {
-            const doc = new jsPDF();
-            const pageHeight = doc.internal.pageSize.height; // 297mm (A4 standard)
-            const margin = 20;
-            let yCursor = 55; // Tracks vertical position dynamically
+            const doc = new jspdf.jsPDF();
+            const pageHeight = doc.internal.pageSize.height;
+            let yCursor = 55;
 
-            // --- HEADER BLOCK ---
             doc.setFillColor(27, 46, 75); 
             doc.rect(0, 0, 210, yCursor, 'F');
 
+            let activeCompanyTitle = d.createdByCompany ? d.createdByCompany.toUpperCase() : "JUSTCABLES";
+            
             doc.setTextColor(236, 201, 75); 
-            doc.setFontSize(26);
-            doc.text("JUSTCABLES", 20, 30);
+            doc.setFontSize(22);
+            doc.text(activeCompanyTitle, 20, 32);
             doc.setFontSize(10);
-            doc.text("Expert in cabling", 20, 38);
+            doc.text("Professional Structured Infrastructure Report", 20, 41);
 
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(9);
-            doc.text("Remus Ivasca | Lead Engineer", 140, 25);
-            doc.text("JustCables", 140, 30);
-            doc.text("00353 858130081", 140, 35);
-            doc.text("justcables@outlook.com / remusivasca@outlook.com", 140, 40);
-            doc.text("Dublin | Ireland", 140, 45);
-
-            // --- CLIENT METADATA ---
             doc.setTextColor(0, 0, 0);
             doc.setFontSize(16);
-            yCursor += 15; // 70
+            yCursor += 15;
             doc.text(`${d.type.toUpperCase()}`, 20, yCursor);
-            
-            doc.setDrawColor(236, 201, 75);
-            yCursor += 5; // 75
-            doc.line(20, yCursor, 190, yCursor); 
 
             doc.setFontSize(11);
-            yCursor += 10; // 85
-            doc.text(`BUSINESS: ${d.biz}`, 20, yCursor);
-            doc.text(`DATE: ${d.date}`, 140, yCursor);
-            
-            yCursor += 7; // 92
-            doc.text(`CONTACT: ${d.contact || 'N/A'}`, 20, yCursor);
-            
-            yCursor += 7; // 99
-            doc.text(`EMAIL: ${d.mail}`, 20, yCursor);
+            yCursor += 15;
+            doc.text(`BUSINESS SITE: ${d.biz}`, 20, yCursor);
+            doc.text(`DATE: ${d.date}`, 130, yCursor);
 
-            // --- DYNAMIC TECHNICAL NOTES PAGINATION ---
+            yCursor += 15;
             doc.setFontSize(12);
-            yCursor += 16; // 115
             doc.text("TECHNICAL NOTES:", 20, yCursor);
             
             doc.setFontSize(10);
-            yCursor += 7; // 122
-
-            // Break up technical notes into single array lines fitting page width
-            const splitNotes = doc.splitTextToSize(d.notes || "No notes provided.", 170);
-            
+            yCursor += 10;
+            const splitNotes = doc.splitTextToSize(d.notes || "No notes.", 170);
             splitNotes.forEach((line) => {
-                // If line exceeds printable area (leaving 25mm space for bottom margin), break page
-                if (yCursor + 7 > pageHeight - 25) {
-                    doc.addPage();
-                    yCursor = 25; // Reset cursor back to the top of the brand new page
-                }
-                doc.text(line, margin, yCursor);
-                yCursor += 6; // Standard line spacing height
+                if (yCursor + 7 > pageHeight - 25) { doc.addPage(); yCursor = 25; }
+                doc.text(line, 20, yCursor);
+                yCursor += 6;
             });
 
-            // --- BILLING SECTION ---
-            // Verify if billing block has enough remaining layout room on current page
-            if (yCursor + 20 > pageHeight - 25) {
-                doc.addPage();
-                yCursor = 25;
-            }
-            
-            yCursor += 12;
+            yCursor += 10;
             doc.setFontSize(14);
-            doc.text(`TOTAL AMOUNT: €${d.price}`, 20, yCursor);
+            doc.text(`TOTAL PROJECT VALUATION: €${d.price}`, 20, yCursor);
 
-            // --- SIGNATURE SECTION ---
             if(d.sig) {
-                if (yCursor + 40 > pageHeight - 25) {
-                    doc.addPage();
-                    yCursor = 25;
-                }
                 yCursor += 15;
+                if (yCursor + 25 > pageHeight - 25) { doc.addPage(); yCursor = 25; }
                 doc.setFontSize(10);
-                doc.text("Customer Signature:", 20, yCursor);
-                doc.addImage(d.sig, 'PNG', 20, yCursor + 5, 60, 25);
-                yCursor += 30;
+                doc.text("Customer Signature Authorization:", 20, yCursor);
+                doc.addImage(d.sig, 'PNG', 20, yCursor + 5, 50, 20);
             }
 
-            // --- IMAGES SECTION ---
-            const images = document.querySelectorAll('#jobSheetPreview img');
-            if (images.length > 0) {
-                doc.addPage(); 
-                doc.setFontSize(14);
-                doc.setTextColor(27, 46, 75);
-                doc.text("ATTACHED IMAGES / FIELD EVIDENCE", 20, 20);
-                
-                doc.setDrawColor(236, 201, 75);
-                doc.line(20, 23, 190, 23);
-                
-                let xOffset = 20;
-                let yOffset = 30;
-                
-                images.forEach((img, index) => {
-                    doc.addImage(img.src, 'JPEG', xOffset, yOffset, 50, 50);
-                    xOffset += 55; 
-                    
-                    if ((index + 1) % 3 === 0) {
-                        xOffset = 20;
-                        yOffset += 55;
-                    }
-                    
-                    if (yOffset > 220 && (index + 1) < images.length) {
-                        doc.addPage();
-                        xOffset = 20;
-                        yOffset = 30;
-                    }
-                });
-            }
-
-            // --- FOOTER NOTE ---
-            // Standard placement logic to check space for footer certification
-            doc.setFontSize(8);
-            doc.setTextColor(150);
-            doc.text("Certified by JustCables Pro CRM - www.justcables.support", 20, 285);
-
-            if (window.cordova) {
-                const pdfOutput = doc.output('datauristring');
-                window.open(pdfOutput, '_system');
-            } else {
-                doc.save(`${d.biz}_Report.pdf`);
-            }
-        }
-
-        function showVault() {
-            document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
-            document.getElementById('vaultSection').classList.remove('hidden');
-            renderVault();
-        }
-
-        function setVaultFilter(f) { 
-            currentFilter = f; 
-            renderVault(); 
-        }
-
-        function renderVault() {
-            const list = document.getElementById('vaultList');
-            const searchVal = document.getElementById('vaultSearch').value.toLowerCase();
-            const purgeBtn = document.getElementById('purgeBtn');
-            
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            list.innerHTML = '';
-
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            if(currentFilter === 'Ongoing') document.getElementById('vOngoing').classList.add('active');
-            if(currentFilter === 'Complete') document.getElementById('vComplete').classList.add('active');
-            if(currentFilter === 'Invalid') document.getElementById('vInvalid').classList.add('active');
-            if(currentFilter === 'Deleted') document.getElementById('vDeleted').classList.add('active');
-
-            if(purgeBtn) {
-                purgeBtn.style.display = (currentFilter === 'Deleted' && db.some(r => r.status === 'Deleted')) ? 'block' : 'none';
-            }
-
-            let filtered = db.filter(r => {
-                const matchesStatus = r.status === currentFilter;
-                const combinedText = `${r.biz} ${r.mail} ${r.contact || ''} ${r.phone || ''} ${r.notes || ''} ${r.type || ''}`.toLowerCase();
-                const matchesSearch = combinedText.includes(searchVal);
-                return matchesStatus && matchesSearch;
-            });
-
-            if(filtered.length === 0) {
-                list.innerHTML = `<p style="text-align:center; color:#888; font-size:0.85rem; margin-top:20px;">No records found in this section.</p>`;
-                return;
-            }
-
-            filtered.forEach(r => {
-                const card = document.createElement('div');
-                card.className = 'record-card';
-                
-                if(r.type.includes('Survey')) card.style.borderLeftColor = '#0056b3'; 
-                if(r.type.includes('Maintenance')) card.style.borderLeftColor = '#28a745'; 
-
-                card.innerHTML = `
-                    <div class="dropdown-container">
-                        <button class="dropdown-btn" onclick="toggleDropdownMenu(event, ${r.id})">Actions ▾</button>
-                        <div id="drop-${r.id}" class="dropdown-content">
-                            <button onclick="event.stopPropagation(); previewRecord(${r.id})">👁️ Preview Mode</button>
-                            <button onclick="event.stopPropagation(); resendEmailPrompt(${r.id})">📩 Resend Email</button>
-                            <button onclick="event.stopPropagation(); downloadSinglePDF(${r.id})">📥 Download PDF</button>
-                            
-                            <div style="background: rgba(0,0,0,0.3); padding: 5px; border-top: 1px solid rgba(236,201,75,0.2); margin-top: 5px;" onclick="event.stopPropagation();">
-                                <span style="font-size: 0.65rem; color: var(--jc-yellow); display: block; padding: 2px 5px; font-weight: bold; text-transform: uppercase;">Set Status:</span>
-                                <button onclick="event.stopPropagation(); updateStatusInline(${r.id}, 'Ongoing')" style="padding: 6px 10px; font-size: 0.7rem; border: none;">🔄 Ongoing</button>
-                                <button onclick="event.stopPropagation(); updateStatusInline(${r.id}, 'Complete')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #28a745;">✅ Complete</button>
-                                <button onclick="event.stopPropagation(); updateStatusInline(${r.id}, 'Invalid')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #ecc94b;">⚠️ Invalid</button>
-                                <button onclick="event.stopPropagation(); updateStatusInline(${r.id}, 'Deleted')" style="padding: 6px 10px; font-size: 0.7rem; border: none; color: #ff4d4d;">🗑️ Delete</button>
-                            </div>
-                        </div>
-                    </div>
-                    <h4>${r.biz}</h4>
-                    <p><strong>Contact:</strong> ${r.contact || 'N/A'} | <strong>Phone:</strong> ${r.phone || 'N/A'}</p>
-                    <p><strong>Email:</strong> ${r.mail}</p>
-                    <p><strong>Date:</strong> ${r.date}</p>
-                    <p><strong>Price:</strong> €${r.price || '0'}</p>
-                    <span class="meta-type">${r.type.toUpperCase()}</span>
-                `;
-                list.appendChild(card);
-            });
-        }
-
-        function toggleDropdownMenu(e, id) {
-            e.stopPropagation();
-            document.querySelectorAll('.dropdown-content').forEach(el => {
-                if(el.id !== `drop-${id}`) el.classList.remove('show-menu');
-            });
-            document.getElementById(`drop-${id}`).classList.toggle('show-menu');
-        }
-
-        window.addEventListener('click', function() {
-            document.querySelectorAll('.dropdown-content').forEach(el => el.classList.remove('show-menu'));
-        });
-
-        function previewRecord(id) {
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            let r = db.find(x => x.id === id);
-            if(!r) return;
-
-            openForm(r.type);
-            document.getElementById('bizName').value = r.biz;
-            document.getElementById('clientMail').value = r.mail;
-            document.getElementById('contactName').value = r.contact || '';
-            document.getElementById('phone').value = r.phone || '';
-            document.getElementById('totalPrice').value = r.price || '';
-            document.getElementById('notes').value = r.notes || '';
-            document.getElementById('workStatus').value = r.status;
-
-            if(r.sig) {
-                let img = new Image();
-                img.src = r.sig;
-                img.onload = function() {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0);
-                };
-            }
-        }
-
-        function resendEmailPrompt(id) {
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            let r = db.find(x => x.id === id);
-            if(!r) return;
-
-            let targetEmail = prompt("Confirm or change recipient email address:", r.mail);
-            if(!targetEmail) return;
-
-            const subject = encodeURIComponent(`[JustCables Copy] ${r.type} - ${r.biz}`);
-            const body = encodeURIComponent(
-                `Dear Customer,\n\nHere is a requested copy of your ${r.type} report.\n\n` +
-                `SUMMARY:\n- Date: ${r.date}\n- Work Status: ${r.status}\n- Total Amount: €${r.price}\n\n` +
-                `Best regards,\nRemus Ivasca | JustCables`
-            );
-
-            const mailUrl = `mailto:${targetEmail}?cc=justcables@outlook.com&subject=${subject}&body=${body}`;
-            if (window.cordova && window.cordova.InAppBrowser) {
-                window.cordova.InAppBrowser.open(mailUrl, '_system');
-            } else {
-                window.location.href = mailUrl;
-            }
-        }
-
-        function downloadSinglePDF(id) {
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            let r = db.find(x => x.id === id);
-            if(r) generatePDF(r);
-        }
-
-        function updateStatusInline(id, newStatus) {
-            let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-            let r = db.find(x => x.id === id);
-            
-            if (r) {
-                r.status = newStatus;
-                localStorage.setItem(DB_KEY, JSON.stringify(db));
-                renderVault(); 
-            }
-        }
-
-        function purgeDeleted() {
-            if(confirm("Permanently delete all records in this folder?")) {
-                let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-                db = db.filter(r => r.status !== 'Deleted');
-                localStorage.setItem(DB_KEY, JSON.stringify(db));
-                renderVault();
-            }
-        }
-
-        function checkForUpdates() {
-            alert("Checking JustCables server for updates...");
-        const updateUrl = "https://raw.githubusercontent.com/Rem95/JustCables/main/index.html?t=" + Date.now();
-            
-            fetch(updateUrl, { cache: "no-store" })
-                .then(response => {
-                    if (!response.ok) throw new Error("Network response was not ok");
-                    return response.text();
-                })
-                .then(htmlText => {
-                   if (htmlText.includes("v2.0.0")) {
-                        alert("You are running the latest version! (v2.3.0)");
-                    } else {
-                        if (confirm("New updates found (v2.3.0)! Do you want to apply them now?")) {
-                            localStorage.setItem('cached_app_code', htmlText);
-                            alert("Update downloaded! Restarting application...");
-                            const cleanUrl = window.location.href.split('?')[0];
-                            window.location.href = cleanUrl + "?updated=" + Date.now();
-                        }
-                    }
-                })
-                .catch(err => {
-                    alert("Update check failed. Make sure you are online or check the URL.");
-                    console.error(err);
-                });
-        }
-
-        function downloadLatestAPK() {
-            const apkUrl = "https://github.com/Rem95/JustCables/releases/download/v2.1.0/app-debug.apk";
-            alert("Opening external browser for secure download...");
-            
-            if (window.cordova && window.cordova.InAppBrowser) {
-                window.cordova.InAppBrowser.open(apkUrl, '_system');
-            } else {
-                window.open(apkUrl, '_system');
-            }
-        }
-
-        function clearFormFields() {
-            const fields = ['bizName', 'clientMail', 'contactName', 'phone', 'totalPrice', 'notes'];
-            fields.forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.value = '';
-            });
-
-            const statusEl = document.getElementById('workStatus');
-            if (statusEl) statusEl.selectedIndex = 0;
-
-            if (typeof clearSignature === 'function') {
-                clearSignature();
-            }
-
-            const photoInput = document.getElementById('jobSheetPhotos');
-            if (photoInput) photoInput.value = ''; 
-            
-            const previewEl = document.getElementById('jobSheetPreview');
-            if (previewEl) previewEl.innerHTML = ''; 
+            doc.save(`${d.biz}_InfrastructureReport.pdf`);
         }
     </script>
 </body>
