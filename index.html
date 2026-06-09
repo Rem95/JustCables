@@ -28,7 +28,8 @@
         const db = getFirestore(app);
 
         // Mapare pe obiectul window pentru apelare directă din HTML (onclick)
-        window.handleLogin = handleLogin;
+        window.handleUserLogin = handleUserLogin;
+        window.handleManagerLogin = handleManagerLogin;
         window.handleRegister = handleRegister;
         window.handleLogout = handleLogout;
         window.saveDataOnline = saveDataOnline;
@@ -46,7 +47,9 @@
 
         let currentUserData = null;
         let currentCloudFilter = 'Ongoing';
-        const MY_EMAILS = ["ivascaremus@gmail.com", "justcables.support@gmail.com", "justcables@outlook.com", "remusivasca@outlook.com"];
+        let isLoggedAsManager = false; 
+        
+        const MY_EMAILS = ["ivascaremus@gmail.com"];
 
         // Monitorizare sesiune User
         onAuthStateChanged(auth, async (user) => {
@@ -58,19 +61,19 @@
                     currentUserData = docSnap.data();
                     currentUserData.uid = user.uid;
                     
-                    if (!MY_EMAILS.includes(currentUserData.email.toLowerCase())) {
+                    if (!isLoggedAsManager) {
                         const status = currentUserData.subscriptionStatus || 'Trial';
-                        let isTrialExpired = false;
-                        if (status === 'Trial' && currentUserData.trialExpiresAt) {
-                            if (Date.now() > currentUserData.trialExpiresAt) isTrialExpired = true;
-                        } else if (status === 'Trial') {
-                            const trialDays = Math.floor((new Date() - new Date(currentUserData.createdAt)) / (1000 * 60 * 60 * 24));
-                            if (trialDays > 30) isTrialExpired = true;
+                        let isExpired = false;
+                        
+                        if (status === 'Trial' && currentUserData.trialExpiresAt && Date.now() > currentUserData.trialExpiresAt) {
+                            isExpired = true;
+                        } else if (status === 'Paid' && currentUserData.subscriptionExpiresAt && Date.now() > currentUserData.subscriptionExpiresAt) {
+                            isExpired = true;
                         }
 
-                        if (status === 'Suspended' || isTrialExpired) {
+                        if (status === 'Suspended' || isExpired) {
                             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
-                            document.getElementById('expiredSection').classList.remove('hidden');
+                            document.getElementById('subscriptionPaySection').classList.remove('hidden');
                             return;
                         }
                     }
@@ -81,21 +84,49 @@
                 }
             } else {
                 currentUserData = null;
+                isLoggedAsManager = false;
                 document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
                 document.getElementById('loginSection').classList.remove('hidden');
             }
         });
 
-        // Autentificare cont existent
-        async function handleLogin() {
+        async function handleUserLogin() {
             const email = document.getElementById('loginEmail').value;
             const pass = document.getElementById('loginPassword').value;
+            const remember = document.getElementById('rememberMe').checked;
             const errDiv = document.getElementById('loginError');
             errDiv.style.display = "none";
 
             if (!email || !pass) return alert("Please fill in all fields!");
 
             try {
+                if (remember) {
+                    localStorage.setItem('jc_saved_email', email);
+                } else {
+                    localStorage.removeItem('jc_saved_email');
+                }
+                isLoggedAsManager = false; 
+                await signInWithEmailAndPassword(auth, email, pass);
+            } catch (error) {
+                errDiv.innerText = "Access Denied: " + error.message;
+                errDiv.style.display = "block";
+            }
+        }
+
+        async function handleManagerLogin() {
+            const email = document.getElementById('managerEmail').value;
+            const pass = document.getElementById('managerPassword').value;
+            const errDiv = document.getElementById('managerError');
+            errDiv.style.display = "none";
+
+            if (!MY_EMAILS.includes(email.toLowerCase())) {
+                errDiv.innerText = "Security Breach: Unauthorized Administrator Email.";
+                errDiv.style.display = "block";
+                return;
+            }
+
+            try {
+                isLoggedAsManager = true; 
                 await signInWithEmailAndPassword(auth, email, pass);
             } catch (error) {
                 errDiv.innerText = "Error: " + error.message;
@@ -103,7 +134,6 @@
             }
         }
 
-        // Creare cont nou
         async function handleRegister() {
             const email = document.getElementById('regEmail').value;
             const pass = document.getElementById('regPassword').value;
@@ -116,30 +146,25 @@
             try {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
                 const user = userCredential.user;
-
-                let role = "client";
-                let subStatus = "Trial";
-                if(MY_EMAILS.includes(email.toLowerCase())) {
-                    role = "manager";
-                    subStatus = "Lifetime Free";
-                }
-
                 const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
 
                 await setDoc(doc(db, "users", user.uid), {
                     email: email,
                     companyName: compName,
-                    role: role,
-                    subscriptionStatus: subStatus,
+                    role: "client", 
+                    subscriptionStatus: "Trial",
                     clientLogo: "", 
                     clientPhone: "",
+                    clientAddress: "",
+                    clientWebsite: "",
+                    clientTaxDetails: "",
                     clientNotesHeader: "Professional Structured Infrastructure Report",
                     createdAt: new Date().toISOString(),
                     trialExpiresAt: Date.now() + thirtyDaysInMs
                 });
 
-                alert("Account created successfully!");
-                toggleAuthScreens();
+                alert("Business Container Deployed Successfully!");
+                toggleAuthScreens('login');
             } catch (error) {
                 regErr.innerText = "Registration Error: " + error.message;
                 regErr.style.display = "block";
@@ -155,13 +180,31 @@
             const managerSection = document.getElementById('managerSection');
             const clientSettingsBtn = document.getElementById('clientSettingsBtn');
             
-            if (currentUserData && currentUserData.role === 'manager') {
+            if (isLoggedAsManager && MY_EMAILS.includes(currentUserData.email.toLowerCase())) {
                 document.getElementById('companyDashboardTitle').innerText = "JUSTCABLES CRM (MANAGER)";
                 if (managerSection) managerSection.style.removeProperty('display');
                 if (clientSettingsBtn) clientSettingsBtn.style.display = 'none';
             } else {
-                if (managerSection) managerSection.style.display = 'none';
+                document.getElementById('companyDashboardTitle').innerText = currentUserData.companyName.toUpperCase();
+                if (managerSection) managerSection.style.display = 'none'; 
                 if (clientSettingsBtn) clientSettingsBtn.style.removeProperty('display');
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedEmail = localStorage.getItem('jc_saved_email');
+            if (savedEmail) {
+                document.getElementById('loginEmail').value = savedEmail;
+                document.getElementById('rememberMe').checked = true;
+            }
+        });
+
+        async function updateCloudStatus(docId, newStatus) {
+            try {
+                await updateDoc(doc(db, "reports", docId), { status: newStatus });
+                loadManagerVault(); 
+            } catch (err) {
+                alert("Error: " + err.message);
             }
         }
 
@@ -169,6 +212,11 @@
             const name = document.getElementById('settingsCompanyName').value;
             const phone = document.getElementById('settingsPhone').value;
             const headerText = document.getElementById('settingsHeader').value;
+            
+            const address = document.getElementById('settingsAddress').value;
+            const website = document.getElementById('settingsWebsite').value;
+            const taxDetails = document.getElementById('settingsTaxDetails').value;
+            
             const logoInput = document.getElementById('settingsLogoFile');
 
             if(!name) return alert("Company Name is required!");
@@ -178,22 +226,25 @@
                 const reader = new FileReader();
                 reader.onload = async function(e) {
                     logoBase64 = e.target.result;
-                    await updateProfileInFirebase(name, phone, headerText, logoBase64);
+                    await updateProfileInFirebase(name, phone, headerText, logoBase64, address, website, taxDetails);
                 };
                 reader.readAsDataURL(logoInput.files[0]);
             } else {
-                await updateProfileInFirebase(name, phone, headerText, logoBase64);
+                await updateProfileInFirebase(name, phone, headerText, logoBase64, address, website, taxDetails);
             }
         }
 
-        async function updateProfileInFirebase(name, phone, headerText, logoData) {
+        async function updateProfileInFirebase(name, phone, headerText, logoData, address, website, taxDetails) {
             try {
                 const userRef = doc(db, "users", currentUserData.uid);
                 await updateDoc(userRef, {
                     companyName: name,
                     clientPhone: phone,
                     clientNotesHeader: headerText,
-                    clientLogo: logoData
+                    clientLogo: logoData,
+                    clientAddress: address,
+                    clientWebsite: website,
+                    clientTaxDetails: taxDetails
                 });
                 alert("Profile settings saved successfully!");
                 location.reload();
@@ -209,6 +260,7 @@
 
             if(!biz || !mail) return alert("Business Name and Email are required!");
 
+            // CONFIGURAT CORECT: Adăugat virgule de sintaxă pentru transmiterea metadatelor în Firestore Node
             const dataReport = {
                 uid: currentUserData.uid,
                 createdByCompany: currentUserData.companyName,
@@ -223,7 +275,15 @@
                 date: new Date().toLocaleString(),
                 timestamp: Date.now(), 
                 type: type,
-                sig: document.getElementById('sig-canvas').toDataURL()
+                sig: document.getElementById('sig-canvas').toDataURL(),
+                photos: window.attachedPhotosBase64,
+                
+                profileHeader: currentUserData.clientNotesHeader || "Professional Structured Infrastructure Report",
+                profilePhone: currentUserData.clientPhone || "",
+                profileLogo: currentUserData.clientLogo || "",
+                profileAddress: currentUserData.clientAddress || "",
+                profileWebsite: currentUserData.clientWebsite || "",
+                profileTaxDetails: currentUserData.clientTaxDetails || ""
             };
 
             try {
@@ -241,24 +301,18 @@
             loadManagerVault(); 
         }
 
-        // CONTROL PLATFORMĂ SUB-REȚEA — LICENȚE & CONTURI (IZOLATĂ COMPLET)
         async function showSubscriptionsOnly() {
-            currentCloudFilter = 'Subscriptions';
+            if (!isLoggedAsManager) return; 
+            
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
-            document.getElementById('vaultSection').classList.remove('hidden');
+            document.getElementById('managerUsersSection').classList.remove('hidden');
             
-            const listDiv = document.getElementById('managerVaultList');
-            const surveyFilterContainer = document.getElementById('surveyFilterContainer');
-            
-            surveyFilterContainer.style.display = 'none';
-            document.getElementById('vaultNotificationBanner').style.display = 'none';
-            document.getElementById('vaultMainTitle').innerText = "Network Platform Control";
-            
-            listDiv.innerHTML = "<p style='text-align:center;'>Fetching secure network nodes...</p>"; 
+            const listDiv = document.getElementById('networkUsersList');
+            listDiv.innerHTML = "<p style='text-align:center;'>Interrogating network sub-nodes...</p>";
 
             try {
                 const usersSnapshot = await getDocs(collection(db, "users"));
-                listDiv.innerHTML = ""; 
+                listDiv.innerHTML = "";
                 const renderedEmails = new Set();
 
                 usersSnapshot.forEach((uDoc) => {
@@ -268,50 +322,65 @@
                     if (renderedEmails.has(u.email.toLowerCase())) return;
                     renderedEmails.add(u.email.toLowerCase());
 
-                    let statusNote = "";
-                    if ((u.subscriptionStatus || 'Trial') === 'Trial' && u.trialExpiresAt) {
-                        const remainingMs = u.trialExpiresAt - Date.now();
-                        const remainingDays = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
-                        statusNote = remainingDays > 0 ? ` (${remainingDays} days left)` : " (Expired)";
+                    let timeNote = "Infinite Access";
+                    const activeStatus = u.subscriptionStatus || 'Trial';
+                    
+                    if (activeStatus === 'Trial' && u.trialExpiresAt) {
+                        const daysLeft = Math.ceil((u.trialExpiresAt - Date.now()) / (1000 * 60 * 60 * 24));
+                        timeNote = daysLeft > 0 ? `${daysLeft} days left` : "Expired Trial";
+                    } else if (activeStatus === 'Paid' && u.subscriptionExpiresAt) {
+                        const daysLeft = Math.ceil((u.subscriptionExpiresAt - Date.now()) / (1000 * 60 * 60 * 24));
+                        timeNote = daysLeft > 0 ? `${daysLeft} paid days remaining` : "Expired License";
+                    } else if (activeStatus === 'Suspended') {
+                        timeNote = "Blocked Content";
                     }
 
-                    const uCard = document.createElement('div');
-                    uCard.className = 'record-card';
-                    uCard.style.borderLeftColor = u.subscriptionStatus === 'Suspended' ? '#ff4d4d' : '#28a745';
-                    uCard.innerHTML = `
+                    const card = document.createElement('div');
+                    card.className = 'record-card';
+                    card.style.borderLeftColor = activeStatus === 'Suspended' ? '#ff4d4d' : '#28a745';
+                    card.innerHTML = `
                         <h4>${u.companyName.toUpperCase()}</h4>
                         <p><strong>Registered Email:</strong> ${u.email}</p>
-                        <p><strong>Created On:</strong> ${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}</p>
-                        <p><strong>Plan Status:</strong> <span style="color:var(--jc-yellow); font-weight:bold;">[${u.subscriptionStatus || 'Trial'}${statusNote}]</span></p>
-                        <div style="margin-top:12px; display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
-                            <button onclick="updateUserSubscription('${uId}', 'Paid')" style="background:#28a745; padding:8px; font-size:0.65rem; margin:0; border-radius:5px; color:white;">Active / Paid</button>
-                            <button onclick="updateUserSubscription('${uId}', 'Lifetime Free')" style="background:#0056b3; padding:8px; font-size:0.65rem; margin:0; border-radius:5px; color:white;">Lifetime Free</button>
-                            <button onclick="addSubscriptionDays('${uId}')" style="background:#ecc94b; padding:8px; font-size:0.65rem; margin:0; border-radius:5px; color:black;">+30 Days Free</button>
-                            <button onclick="updateUserSubscription('${uId}', 'Suspended')" style="background:#dc3545; padding:8px; font-size:0.65rem; margin:0; border-radius:5px; color:white;">Suspend Acc</button>
+                        <p><strong>Account Status:</strong> <span style="color:var(--jc-yellow); font-weight:bold;">[${activeStatus}]</span></p>
+                        <p><strong>Time Allocation:</strong> ${timeNote}</p>
+                        
+                        <div style="margin-top:12px; display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
+                            <button onclick="updateUserSubscription('${uId}', 'Paid', 30)" style="background:#28a745; font-size:0.65rem; padding:8px; margin:0; color:#fff; border-radius:4px; border:none; font-weight:bold; cursor:pointer;">+1 Month Paid</button>
+                            <button onclick="updateUserSubscription('${uId}', 'Paid', 180)" style="background:#0056b3; font-size:0.65rem; padding:8px; margin:0; color:#fff; border-radius:4px; border:none; font-weight:bold; cursor:pointer;">+6 Months Paid</button>
+                            <button onclick="updateUserSubscription('${uId}', 'Lifetime Free', 0)" style="background:#6f42c1; font-size:0.65rem; padding:8px; margin:0; color:#fff; border-radius:4px; border:none; font-weight:bold; cursor:pointer;">Lifetime Free</button>
+                            <button onclick="updateUserSubscription('${uId}', 'Suspended', 0)" style="background:#dc3545; font-size:0.65rem; padding:8px; margin:0; color:#fff; border-radius:4px; border:none; font-weight:bold; cursor:pointer;">Block Acc</button>
                         </div>
                     `;
-                    listDiv.appendChild(uCard);
+                    listDiv.appendChild(card);
                 });
-            } catch(err) {
-                listDiv.innerHTML = "Error rendering tree: " + err.message;
+            } catch(e) {
+                listDiv.innerHTML = "Error loading subscribers tree: " + e.message;
             }
         }
 
-        // ÎNCĂRCARE GLOBALĂ CENTRALĂ DIRECTĂ — FILTRARE SURVEY-URI ȘI RAPOARTE TEHNICE
-        async function loadManagerVault() {
-            if (currentCloudFilter === 'Subscriptions') {
+        async function updateUserSubscription(userId, status, daysToAdd) {
+            try {
+                let updateData = { subscriptionStatus: status };
+                if (daysToAdd > 0) {
+                    updateData.subscriptionExpiresAt = Date.now() + (daysToAdd * 24 * 60 * 60 * 1000);
+                } else {
+                    updateData.subscriptionExpiresAt = null; 
+                }
+                await updateDoc(doc(db, "users", userId), updateData);
+                alert("Subscriber license database updated successfully!");
                 showSubscriptionsOnly();
-                return;
+            } catch(e) {
+                alert("Operation failed: " + e.message);
             }
+        }
 
+        async function addSubscriptionDays(userId) {
+            updateUserSubscription(userId, 'Trial', 30);
+        }
+
+        async function loadManagerVault() {
             const listDiv = document.getElementById('managerVaultList');
-            const surveyFilterContainer = document.getElementById('surveyFilterContainer');
-            
-            surveyFilterContainer.style.removeProperty('display');
-            document.getElementById('vaultNotificationBanner').style.removeProperty('display');
-            document.getElementById('vaultMainTitle').innerText = "Central Database Node";
-            
-            listDiv.innerHTML = "<p style='text-align:center;'>Reading cloud documents...</p>"; 
+            listDiv.innerHTML = "<p style='text-align:center;'>Opening localized data logs...</p>";
 
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             if(document.getElementById(`v${currentCloudFilter}`)) {
@@ -320,14 +389,14 @@
 
             const purgeBtn = document.getElementById('cloudPurgeBtn');
             if(purgeBtn) {
-                purgeBtn.style.display = (currentCloudFilter === 'Deleted' && currentUserData.role === 'manager') ? 'block' : 'none';
+                purgeBtn.style.display = (currentCloudFilter === 'Deleted' && isLoggedAsManager) ? 'block' : 'none';
             }
 
             try {
                 const querySnapshot = await getDocs(collection(db, "reports"));
-                listDiv.innerHTML = ""; 
+                listDiv.innerHTML = "";
                 let counter = 0;
-                const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000); 
+                const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
 
                 querySnapshot.forEach((docSnap) => {
                     const r = docSnap.data();
@@ -335,14 +404,14 @@
 
                     if (r.timestamp && r.timestamp < ninetyDaysAgo) {
                         deleteDoc(doc(db, "reports", docId));
-                        return; 
+                        return;
                     }
 
                     const currentStatus = r.status || 'Ongoing';
 
-                    if (currentUserData.role !== 'manager' && r.uid !== currentUserData.uid) return;
+                    if (!isLoggedAsManager && r.uid !== currentUserData.uid) return;
                     if (currentStatus !== currentCloudFilter) return;
-                    
+
                     counter++;
 
                     const card = document.createElement('div');
@@ -373,72 +442,31 @@
                         <p><strong>COMPANY CONTAINER:</strong> ${r.createdByCompany.toUpperCase()}</p>
                         <p><strong>Contact:</strong> ${r.contact || 'N/A'} | <strong>Phone:</strong> ${r.phone || 'N/A'}</p>
                         <p><strong>Email:</strong> ${r.mail} | <strong>Date:</strong> ${r.date}</p>
-                        <p><strong>Valuation:</strong> €${r.price || '0'} <span style="color:var(--jc-yellow); font-weight:bold;">[${currentStatus.toUpperCase()}]</span></p>
+                        <p><strong>Project Valuation:</strong> €${r.price || '0'} <span style="color:var(--jc-yellow); font-weight:bold;">[${currentStatus.toUpperCase()}]</span></p>
                         <p style="font-size: 0.75rem; color: #ccc; margin-top: 5px; background: rgba(0,0,0,0.2); padding: 5px; border-radius:4px;"><strong>Notes:</strong> ${r.notes}</p>
                     `;
                     listDiv.appendChild(card);
                 });
 
                 if (counter === 0) {
-                    listDiv.innerHTML = `<p style='text-align:center; color:#888; margin-top:20px;'>No records found in the [${currentCloudFilter}] container.</p>`;
+                    listDiv.innerHTML = `<p style='text-align:center; color:#888; margin-top:20px;'>No infrastructure logs detected inside the [${currentCloudFilter}] section.</p>`;
                 }
 
-            } catch (err) {
-                listDiv.innerHTML = "Sync Error: " + err.message;
-            }
-        }
-
-        // SCHIMBARE LICENȚE DIRECTĂ — RĂMÂNE FIXAT PE ECRANUL DE SUBSCRIPȚII DUPĂ SALVARE
-        async function updateUserSubscription(userId, status) {
-            try {
-                await updateDoc(doc(db, "users", userId), { subscriptionStatus: status });
-                alert(`Account subscription status changed to: ${status}`);
-                showSubscriptionsOnly(); 
             } catch(e) {
-                alert("Failed: " + e.message);
-            }
-        }
-
-        async function addSubscriptionDays(userId) {
-            try {
-                const userRef = doc(db, "users", userId);
-                const userSnap = await getDoc(userRef);
-                if (userSnap.exists()) {
-                    const uData = userSnap.data();
-                    let baseTime = uData.trialExpiresAt && uData.trialExpiresAt > Date.now() ? uData.trialExpiresAt : Date.now();
-                    const newExpiry = baseTime + (30 * 24 * 60 * 60 * 1000);
-                    
-                    await updateDoc(userRef, { 
-                        subscriptionStatus: 'Trial',
-                        trialExpiresAt: newExpiry 
-                    });
-                    alert("Added 30 extra trial days to this container.");
-                    showSubscriptionsOnly();
-                }
-            } catch(e) {
-                alert("Failed: " + e.message);
+                listDiv.innerHTML = "Error opening network data node: " + e.message;
             }
         }
 
         async function purgeAllDeletedDocuments() {
-            if(!confirm("Are you absolutely sure you want to PERMANENTLY DELETE all files in this folder?")) return;
-
+            if(!confirm("Reclaim server memory space permanently? This will destroy all logs in trash bin forever.")) return;
             try {
                 const querySnapshot = await getDocs(collection(db, "reports"));
-                let deletePromises = [];
-
                 querySnapshot.forEach((docSnap) => {
-                    if(docSnap.data().status === 'Deleted') {
-                        deletePromises.push(deleteDoc(doc(db, "reports", docSnap.id))); 
-                    }
+                    if(docSnap.data().status === 'Deleted') deleteDoc(doc(db, "reports", docSnap.id));
                 });
-
-                await Promise.all(deletePromises);
-                alert("Cloud Storage space reclaimed successfully!");
-                loadManagerVault(); 
-            } catch (err) {
-                alert("Purge failed: " + err.message);
-            }
+                alert("Cloud storage space reclaimed successfully!");
+                loadManagerVault();
+            } catch(e){ alert("Purge failed."); }
         }
 
         function toggleCloudMenu(e, id) {
@@ -453,23 +481,13 @@
             document.querySelectorAll('.dropdown-content').forEach(el => el.classList.remove('show-menu'));
         });
 
-        async function updateCloudStatus(docId, newStatus) {
-            try {
-                await updateDoc(doc(db, "reports", docId), { status: newStatus });
-                alert(`Status updated successfully to: ${newStatus}`);
-                loadManagerVault(); 
-            } catch (err) {
-                alert("Failed to update status: " + err.message);
-            }
-        }
-
         function downloadCloudPDF(id, data) {
             if(typeof generatePDF === 'function') generatePDF(data);
         }
 
         function resendCloudEmail(r) {
-            const subject = encodeURIComponent(`[Copy Report] ${r.type} - ${r.biz}`);
-            const body = encodeURIComponent(`Find attached your report generated by ${r.createdByCompany.toUpperCase()}.`);
+            const subject = encodeURIComponent(`[Infrastructure Report Copy] ${r.type} - ${r.biz}`);
+            const body = encodeURIComponent(`Hello,\n\nPlease find attached the network documentation sheet created for ${r.biz}.\n\nPowered by JustCables Enterprise.`);
             window.location.href = `mailto:${r.mail}?cc=justcables.support@gmail.com&subject=${subject}&body=${body}`;
         }
     </script>
@@ -502,6 +520,8 @@
         .dropdown-content button { width: 100%; padding: 10px; margin: 0; text-align: left; background: transparent; color: white; font-size: 0.75rem; border: none; border-bottom: 1px solid rgba(255,255,255,0.05); border-radius: 0; }
         .dropdown-content button:hover { background: var(--jc-yellow) !important; color: black !important; }
         .show-menu { display: block !important; }
+
+        .switch-link { text-align:center; font-size:0.8rem; margin-top:15px; cursor:pointer; color:var(--jc-yellow); text-transform:uppercase; font-weight:bold; letter-spacing:0.5px; }
     </style>
 </head>
 <body>
@@ -510,41 +530,84 @@
         <source src="background.mp4" type="video/mp4">
     </video>
 
-    <div id="expiredSection" class="app-container hidden" style="border-color:#ff4d4d; text-align:center;">
-        <h2 style="color:#ff4d4d; letter-spacing:1px;">⚠️ TRIAL EXPIRED</h2>
-        <p style="font-size:0.9rem; line-height:1.6; margin-top:15px; color:#ddd;">
-            Your 30-day trial period has ended. To renew your subscription, update your business features or request an active deployment plan, please contact <strong>JustCables Cloud Management</strong>.
-        </p>
-        <p style="color:var(--jc-yellow); font-weight:bold; margin-top:20px; font-size:0.9rem;">justcables.support@gmail.com</p>
-        <button class="btn-main" style="background:#444; color:#fff;" onclick="handleLogout()">Exit Application</button>
-    </div>
-
     <div id="loginSection" class="app-container">
         <img src="icon.png" style="width: 100px; display: block; margin: 0 auto 10px;">
-        <h2 style="text-align:center; color:var(--jc-yellow); letter-spacing: 2px;">SECURE ACCESS</h2>
+        <h2 id="authScreenTitle" style="text-align:center; color:var(--jc-yellow); letter-spacing: 2px;">SUBCONTRACTOR ACCESS</h2>
         
         <div id="authLoginFields">
-            <label>Email Address</label>
-            <input type="email" id="loginEmail" placeholder="manager@company.com">
+            <label>Subcontractor Email</label>
+            <input type="email" id="loginEmail" placeholder="yourname@domain.com">
+            
             <label>Password</label>
             <input type="password" id="loginPassword" placeholder="••••••••">
-            <button class="btn-main" onclick="handleLogin()">Sign In</button>
-            <p style="text-align:center; font-size:0.8rem; margin-top:15px; cursor:pointer; color:var(--jc-yellow);" onclick="toggleAuthScreens()">Don't have an account? Register here</p>
-            <div id="loginError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold;"></div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:0.75rem;">
+                <label style="margin:0; display:flex; align-items:center; color:#fff; text-transform:none;"><input type="checkbox" id="rememberMe" style="width:auto; margin-right:5px; margin-top:0;"> Remember Me</label>
+                <span onclick="togglePasswordVisibility('loginPassword')" style="color:var(--jc-yellow); cursor:pointer; font-weight:bold;">Show/Hide Password</span>
+            </div>
+            
+            <button class="btn-main" onclick="handleUserLogin()">Sign In As User</button>
+            
+            <p class="switch-link" onclick="toggleAuthScreens('register')">Create New Account</p>
+            <p class="switch-link" style="color:#fff;" onclick="toggleAuthScreens('manager_login')">🛡️ Administrative Access Node</p>
+            <div id="loginError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold; font-size:0.8rem;"></div>
+        </div>
+
+        <div id="authManagerFields" class="hidden">
+            <h3 style="text-align:center; color:#ff4d4d; letter-spacing:1px; font-size:0.9rem;">🔒 SECURE MANAGER NODE</h3>
+            <label>Root Administrator Email</label>
+            <input type="email" id="managerEmail" placeholder="ivascaremus@gmail.com">
+            <label>Secret Password</label>
+            <input type="password" id="managerPassword" placeholder="••••••••">
+            <button class="btn-main" style="background:#0056b3; color:white;" onclick="handleManagerLogin()">Verify Identity & Boot</button>
+            <p class="switch-link" style="color:#fff;" onclick="toggleAuthScreens('login')">Back to Standard User Portal</p>
+            <div id="managerError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold; font-size:0.8rem;"></div>
         </div>
 
         <div id="authRegisterFields" class="hidden">
-            <h3 style="text-align: center; color: var(--jc-yellow); font-size:1rem;">CREATE BUSINESS CONTAINER</h3>
+            <h3 style="text-align: center; color: var(--jc-yellow); font-size:0.9rem;">REGISTER INDEPENDENT CONTAINER</h3>
             <label>Company Display Name *</label>
             <input type="text" id="regCompanyName" placeholder="e.g. JustCables.ie">
             <label>Email Address *</label>
-            <input type="email" id="regEmail" placeholder="yourname@domain.com">
+            <input type="email" id="regEmail" placeholder="contractor@domain.com">
             <label>Password *</label>
             <input type="password" id="regPassword" placeholder="Minimum 6 characters">
-            <button class="btn-main" style="background-color: #28a745; color: white;" onclick="handleRegister()">Create Account</button>
-            <p style="text-align:center; font-size:0.8rem; margin-top:15px; cursor:pointer; color: #fff;" onclick="toggleAuthScreens()">Cancel and go back</p>
+            <button class="btn-main" style="background-color: #28a745; color: white;" onclick="handleRegister()">Build Container</button>
+            <p class="switch-link" style="color: #fff;" onclick="toggleAuthScreens('login')">Cancel and Go Back</p>
             <div id="regError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold;"></div>
         </div>
+    </div>
+
+    <div id="subscriptionPaySection" class="app-container hidden" style="border-color:#ff4d4d; text-align:center;">
+        <h2 style="color:#ff4d4d; letter-spacing:1px;">⚠️ CONTAINER SUSPENDED</h2>
+        <p style="font-size:0.85rem; line-height:1.6; margin-top:15px; color:#ddd;">
+            Your account license has expired. To maintain secure storage space for your network surveys and avoid system cleanup routines, choose an enterprise payment gateway plan:
+        </p>
+        
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:20px; text-align:left;">
+            <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; border:1px solid #444;">
+                <span style="font-size:0.65rem; font-weight:bold; color:var(--jc-yellow);">1 WEEK TEST</span>
+                <h4 style="margin:5px 0; font-size:1.1rem;">€14.99</h4>
+            </div>
+            <div style="background:rgba(236,201,75,0.1); padding:10px; border-radius:8px; border:1px solid var(--jc-yellow);">
+                <span style="font-size:0.65rem; font-weight:bold; color:var(--jc-yellow);">1 MONTH PLAN</span>
+                <h4 style="margin:5px 0; font-size:1.1rem;">€39.99</h4>
+            </div>
+            <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; border:1px solid #444;">
+                <span style="font-size:0.65rem; font-weight:bold; color:var(--jc-yellow);">6 MONTHS SAVER</span>
+                <h4 style="margin:5px 0; font-size:1.1rem;">€180.00</h4>
+            </div>
+            <div style="background:rgba(40,167,69,0.1); padding:10px; border-radius:8px; border:1px solid #28a745;">
+                <span style="font-size:0.65rem; font-weight:bold; color:#28a745;">1 YEAR FULL</span>
+                <h4 style="margin:5px 0; font-size:1.1rem;">€349.99</h4>
+            </div>
+        </div>
+        
+        <p style="font-size:0.75rem; color:#aaa; margin-top:15px; font-style:italic;">
+            Please execute payment via Business Revolut or Bank Wire, then contact administration node for remote license clearance:
+        </p>
+        <p style="color:var(--jc-yellow); font-weight:bold; margin-top:5px; font-size:0.85rem;">justcables.support@gmail.com</p>
+        <button class="btn-main" style="background:#444; color:#fff;" onclick="handleLogout()">Exit Session</button>
     </div>
 
     <div id="dashboardSection" class="app-container hidden">
@@ -558,8 +621,8 @@
         <button id="clientSettingsBtn" style="background:transparent; color:var(--jc-yellow); border:1px dashed var(--jc-yellow);" onclick="openSettings()">⚙️ Custom Profile & Logo Settings</button>
 
         <div id="managerSection" style="display:none; margin-top:20px; border-top:1px dashed var(--jc-yellow); padding-top:15px;">
-            <h3 style="color:var(--jc-yellow); text-align:center; font-size:0.8rem;">🛡️ ADMINISTRATOR PLATFORM ACCESS</h3>
-            <button style="background:#0056b3; color:white; margin-top:5px;" onclick="showSubscriptionsOnly();">👥 Manage User Subscriptions</button>
+            <h3 style="color:var(--jc-yellow); text-align:center; font-size:0.8rem;">🛡️ CORE ADMINISTRATION PRIVILEGES</h3>
+            <button style="background:#0056b3; color:white; margin-top:5px;" onclick="showSubscriptionsOnly();">👥 Manage System Subscribers Tree</button>
         </div>
 
         <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="handleLogout()">Logout</button>
@@ -567,12 +630,25 @@
 
     <div id="settingsSection" class="app-container hidden">
         <h2 style="text-align:center; color:var(--jc-yellow);">Profile Customization</h2>
+        
         <label>Your Company Name</label>
         <input type="text" id="settingsCompanyName">
+        
         <label>Contact Phone Number</label>
         <input type="text" id="settingsPhone">
+        
         <label>PDF Sub-Header Slogan</label>
         <input type="text" id="settingsHeader">
+
+        <label>Business Address</label>
+        <input type="text" id="settingsAddress" placeholder="e.g. Unit 4, Longmile Road, Dublin">
+
+        <label>Website URL</label>
+        <input type="url" id="settingsWebsite" placeholder="e.g. www.yourdomain.ie">
+
+        <label>Additional Details (VAT / Registration No.)</label>
+        <input type="text" id="settingsTaxDetails" placeholder="e.g. VAT IE1234567X">
+        
         <label>Upload Your Company Logo (.png / .jpg)</label>
         <input type="file" id="settingsLogoFile" accept="image/*" style="background:#fff; color:#000; padding:10px; border-radius:5px; margin-top:5px; width:100%;">
         
@@ -602,12 +678,17 @@
         </div>
         <label>Technical Notes</label>
         <textarea id="notes" rows="4"></textarea>
+
+        <label>Attach Project Photos (Rack, Cabinets, Cables)</label>
+        <input type="file" id="surveyPhotos" accept="image/*" multiple style="background:#fff; color:#000; padding:10px; border-radius:5px; margin-top:5px; width:100%;">
+        <div id="photoPreviewContainer" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;"></div>
+
         <label>Customer Signature</label>
         <canvas id="sig-canvas"></canvas>
         <button type="button" style="background:#333; color:var(--jc-yellow); font-size:0.7rem; padding:8px; margin-top:5px; border:1px solid var(--jc-yellow);" onclick="clearSignature()">Clear Signature</button>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:15px;">
             <button class="btn-main" onclick="saveDataOnline()">Save & Export</button>
-            <button style="background:transparent; border:1px solid white; color:white;" onclick="showDashboard()">Back</button>
+            <button style="background:transparent; border:1px solid white; color:white;" onclick="closeFormView()">Back</button>
         </div>
     </div>
 
@@ -630,6 +711,12 @@
         <button class="btn-main" onclick="showDashboard()">Back to Dashboard</button>
     </div>
 
+    <div id="managerUsersSection" class="app-container hidden" style="border-color:#0056b3;">
+        <h2 style="text-align:center; color:#0056b3; margin-bottom:15px;">👥 NETWORK CORE MANAGMENTSHIP</h2>
+        <div id="networkUsersList" style="max-height:450px; overflow-y:auto; margin-bottom:15px; padding-right:5px;"></div>
+        <button class="btn-main" onclick="showDashboard()">Back to Dashboard</button>
+    </div>
+
     <footer>
         <p>System Powered by <strong>JustCables Cloud Enterprise</strong></p>
     </footer>
@@ -637,9 +724,29 @@
     <script>
         let canvas, ctx, drawing = false;
 
-        function toggleAuthScreens() {
-            document.getElementById('authLoginFields').classList.toggle('hidden');
-            document.getElementById('authRegisterFields').classList.toggle('hidden');
+        // Variabilă globală buffer pentru pozele comprimate
+        window.attachedPhotosBase64 = [];
+
+        function toggleAuthScreens(screen) {
+            document.getElementById('authLoginFields').classList.add('hidden');
+            document.getElementById('authRegisterFields').classList.add('hidden');
+            document.getElementById('authManagerFields').classList.add('hidden');
+            
+            if (screen === 'login') {
+                document.getElementById('authLoginFields').classList.remove('hidden');
+                document.getElementById('authScreenTitle').innerText = "SUBCONTRACTOR ACCESS";
+            } else if (screen === 'register') {
+                document.getElementById('authRegisterFields').classList.remove('hidden');
+                document.getElementById('authScreenTitle').innerText = "CREATE CONTAINER";
+            } else if (screen === 'manager_login') {
+                document.getElementById('authManagerFields').classList.remove('hidden');
+                document.getElementById('authScreenTitle').innerText = "SECURITY ENTRANCE";
+            }
+        }
+
+        function togglePasswordVisibility(fieldId) {
+            const el = document.getElementById(fieldId);
+            el.type = el.type === 'password' ? 'text' : 'password';
         }
 
         function showDashboard() {
@@ -657,24 +764,109 @@
             document.getElementById('phone').value = '';
             document.getElementById('totalPrice').value = '';
             document.getElementById('notes').value = '';
+            
+            // Resetarea memoriei temporare la deschidere survey curat
+            window.attachedPhotosBase64 = []; 
+            if(document.getElementById('photoPreviewContainer')) document.getElementById('photoPreviewContainer').innerHTML = "";
+            if(document.getElementById('surveyPhotos')) document.getElementById('surveyPhotos').value = "";
+            
             initCanvas();
+            clearSignature(); 
         }
+        
+        function closeFormView() {
+            clearSignature();
+            window.attachedPhotosBase64 = [];
+            if(document.getElementById('photoPreviewContainer')) document.getElementById('photoPreviewContainer').innerHTML = "";
+            if(document.getElementById('surveyPhotos')) document.getElementById('surveyPhotos').value = "";
+            showDashboard();
+        }
+
+        // UNICUL EVENT LISTENER PENTRU INTERCEPTARE ȘI COMPRESIE FOTOGRAFII (MAX 15 POZE)
+        document.addEventListener('DOMContentLoaded', () => {
+            const photoInput = document.getElementById('surveyPhotos');
+            if(photoInput) {
+                photoInput.addEventListener('change', function(e) {
+                    const previewContainer = document.getElementById('photoPreviewContainer');
+                    previewContainer.innerHTML = ""; 
+                    window.attachedPhotosBase64 = []; 
+                    
+                    if (e.target.files) {
+                        const filesArray = Array.from(e.target.files).slice(0, 15); 
+                        
+                        filesArray.forEach(file => {
+                            const reader = new FileReader();
+                            reader.onload = function(event) {
+                                const img = new Image();
+                                img.src = event.target.result;
+                                img.onload = function() {
+                                    // Inițializare motor grafic de scalare dinamică
+                                    const canvasVirtual = document.createElement('canvas');
+                                    const ctxVirtual = canvasVirtual.getContext('2d');
+                                    
+                                    const MAX_WIDTH = 800;
+                                    const MAX_HEIGHT = 600;
+                                    let width = img.width;
+                                    let height = img.height;
+                                    
+                                    if (width > height) {
+                                        if (width > MAX_WIDTH) {
+                                            height *= MAX_WIDTH / width;
+                                            width = MAX_WIDTH;
+                                        }
+                                    } else {
+                                        if (height > MAX_HEIGHT) {
+                                            width *= MAX_HEIGHT / height;
+                                            height = MAX_HEIGHT;
+                                        }
+                                    }
+                                    
+                                    canvasVirtual.width = width;
+                                    canvasVirtual.height = height;
+                                    ctxVirtual.drawImage(img, 0, 0, width, height);
+                                    
+                                    // Export securizat la 60% calitate pentru reducerea greutății fișierului în KB
+                                    const compressedBase64 = canvasVirtual.toDataURL('image/jpeg', 0.6);
+                                    window.attachedPhotosBase64.push(compressedBase64);
+                                    
+                                    const previewImg = document.createElement('img');
+                                    previewImg.src = compressedBase64;
+                                    previewImg.style.width = "70px";
+                                    previewImg.style.height = "70px";
+                                    previewImg.style.objectFit = "cover";
+                                    previewImg.style.borderRadius = "5px";
+                                    previewImg.style.border = "1px solid var(--jc-yellow)";
+                                    previewContainer.appendChild(previewImg);
+                                };
+                            };
+                            reader.readAsDataURL(file);
+                        });
+                    }
+                });
+            }
+        });
 
         function showVault() {
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('vaultSection').classList.remove('hidden');
-            
-            // RESETĂM IMPLICIT BUFFERUL PE ONGOING RAPOARTE LA INTRAREA DIN DASHBOARD
             currentCloudFilter = 'Ongoing';
             loadManagerVault();
         }
 
+        // Caută funcția openSettings() și adaugă liniile pentru noile input-uri
         function openSettings() {
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('settingsSection').classList.remove('hidden');
+            
+            // Datele existente deja mapate
             document.getElementById('settingsCompanyName').value = currentUserData.companyName || "";
             document.getElementById('settingsPhone').value = currentUserData.clientPhone || "";
             document.getElementById('settingsHeader').value = currentUserData.clientNotesHeader || "";
+            
+            // POPULARE CÂMPURI NOI ATAȘATE PROFILULUI
+            document.getElementById('settingsAddress').value = currentUserData.clientAddress || "";
+            document.getElementById('settingsWebsite').value = currentUserData.clientWebsite || "";
+            document.getElementById('settingsTaxDetails').value = currentUserData.clientTaxDetails || "";
         }
 
         function initCanvas() {
@@ -691,7 +883,7 @@
             canvas.ontouchmove = (e) => { if(drawing) { const p = getP(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); } };
         }
 
-        function clearSignature() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+        function clearSignature() { if(ctx) ctx.clearRect(0, 0, canvas.width, canvas.height); }
 
         function generatePDF(d) {
             const doc = new jspdf.jsPDF();
@@ -701,7 +893,7 @@
             doc.setFillColor(27, 46, 75); 
             doc.rect(0, 0, 210, yCursor, 'F');
 
-            const isManager = ["ivascaremus@gmail.com", "justcables.support@gmail.com", "justcables@outlook.com", "remusivasca@outlook.com"].includes(d.creatorEmail ? d.creatorEmail.toLowerCase() : "");
+            const isManager = ["ivascaremus@gmail.com"].includes(d.creatorEmail ? d.creatorEmail.toLowerCase() : "");
 
             if (isManager) {
                 doc.setTextColor(236, 201, 75); 
@@ -727,12 +919,24 @@
                 
                 doc.setTextColor(255, 255, 255);
                 doc.setFontSize(9);
-                doc.text(currentUserData.clientNotesHeader || "Professional Infrastructure Report", 20, 38);
-                if(currentUserData.clientPhone) doc.text(`Phone: ${currentUserData.clientPhone}`, 140, 30);
-                doc.text(`Email: ${currentUserData.email}`, 140, 36);
+                doc.text(d.profileHeader || "Professional Infrastructure Report", 20, 38);
+                
+                // COLOANA DIN DREAPTA - COMPLETARE DATE BRAND DINAMICE
+                let rightColumnX = 135;
+                let lineY = 18;
+                
+                if (d.profilePhone) { doc.text(`Phone: ${d.profilePhone}`, rightColumnX, lineY); lineY += 5; }
+                doc.text(`Email: ${d.creatorEmail}`, rightColumnX, lineY); lineY += 5;
+                
+                // DESENARE DATE NOI ÎN ANTETUL PDF-ULUI
+                if (d.profileAddress) { doc.text(`Address: ${d.profileAddress}`, rightColumnX, lineY); lineY += 5; }
+                if (d.profileWebsite) { doc.text(`Web: ${d.profileWebsite}`, rightColumnX, lineY); lineY += 5; }
+                if (d.profileTaxDetails) { doc.text(`Reg: ${d.profileTaxDetails}`, rightColumnX, lineY); }
 
-                if (currentUserData.clientLogo) {
-                    try { doc.addImage(currentUserData.clientLogo, 'PNG', 140, 10, 25, 15); } catch(e){}
+                if (d.profileLogo) {
+                    try { 
+                        doc.addImage(d.profileLogo, 'PNG', 20, 42, 20, 10); 
+                    } catch(e){ console.log("Logo rendering skipped"); }
                 }
             }
 
@@ -767,6 +971,30 @@
             if (yCursor + 20 > pageHeight - 25) { doc.addPage(); yCursor = 25; }
             doc.setFontSize(13);
             doc.text(`TOTAL PROJECT VALUATION: €${d.price || '0'}`, 20, yCursor);
+            
+            // GENERARE ȘI RANSARE IMAGINI COMPRIMATE ÎN CONFIGURAȚIE PDF
+            if (d.photos && d.photos.length > 0) {
+                yCursor += 10;
+                if (yCursor + 45 > pageHeight - 25) { doc.addPage(); yCursor = 25; }
+                
+                doc.setFontSize(12);
+                doc.setTextColor(0, 0, 0);
+                doc.text("ATTACHED INFRASTRUCTURE IMAGES:", 20, yCursor);
+                yCursor += 8;
+
+                let xCursor = 20;
+                d.photos.forEach((photoData) => {
+                    try {
+                        if (yCursor + 40 > pageHeight - 25) { doc.addPage(); yCursor = 25; }
+                        doc.addImage(photoData, 'JPEG', xCursor, yCursor, 50, 40);
+                        xCursor += 55;
+                        if(xCursor > 150) { xCursor = 20; yCursor += 45; }
+                    } catch (e) {
+                        console.log("Error inserting image to PDF:", e);
+                    }
+                });
+                yCursor += 45; 
+            }
 
             if(d.sig) {
                 yCursor += 12;
