@@ -8,7 +8,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         // Configurația ta oficială Firebase completă
         const firebaseConfig = {
@@ -33,10 +33,22 @@
         window.handleLogout = handleLogout;
         window.saveDataOnline = saveDataOnline;
         window.loadManagerVault = loadManagerVault;
+        window.setCloudFilter = setCloudFilter;
+        window.purgeAllDeletedDocuments = purgeAllDeletedDocuments;
+        window.toggleCloudMenu = toggleCloudMenu;
+        window.updateCloudStatus = updateCloudStatus;
+        window.downloadCloudPDF = downloadCloudPDF;
+        window.resendCloudEmail = resendCloudEmail;
+        window.saveClientProfile = saveClientProfile;
+        window.updateUserSubscription = updateUserSubscription;
+        window.addSubscriptionDays = addSubscriptionDays;
+        window.showSubscriptionsOnly = showSubscriptionsOnly;
 
         let currentUserData = null;
+        let currentCloudFilter = 'Ongoing';
+        const MY_EMAILS = ["ivascaremus@gmail.com", "justcables.support@gmail.com", "justcables@outlook.com", "remusivasca@outlook.com"];
 
-        // Monitorizare sesiune User (Logat / Delocat)
+        // Monitorizare sesiune User
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 const docRef = doc(db, "users", user.uid);
@@ -46,9 +58,24 @@
                     currentUserData = docSnap.data();
                     currentUserData.uid = user.uid;
                     
-                    // Schimbă titlul dashboard-ului cu numele companiei sale
+                    if (!MY_EMAILS.includes(currentUserData.email.toLowerCase())) {
+                        const status = currentUserData.subscriptionStatus || 'Trial';
+                        let isTrialExpired = false;
+                        if (status === 'Trial' && currentUserData.trialExpiresAt) {
+                            if (Date.now() > currentUserData.trialExpiresAt) isTrialExpired = true;
+                        } else if (status === 'Trial') {
+                            const trialDays = Math.floor((new Date() - new Date(currentUserData.createdAt)) / (1000 * 60 * 60 * 24));
+                            if (trialDays > 30) isTrialExpired = true;
+                        }
+
+                        if (status === 'Suspended' || isTrialExpired) {
+                            document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
+                            document.getElementById('expiredSection').classList.remove('hidden');
+                            return;
+                        }
+                    }
+
                     document.getElementById('companyDashboardTitle').innerText = currentUserData.companyName.toUpperCase();
-                    
                     showDashboard();
                     applyPermissions();
                 }
@@ -76,7 +103,7 @@
             }
         }
 
-        // Creare cont nou (Înregistrare tip Facebook)
+        // Creare cont nou
         async function handleRegister() {
             const email = document.getElementById('regEmail').value;
             const pass = document.getElementById('regPassword').value;
@@ -90,18 +117,25 @@
                 const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
                 const user = userCredential.user;
 
-                // Alocare automată rol de Manager pentru conturile tale principale
                 let role = "client";
-                if(email.toLowerCase() === "justcables@outlook.com" || email.toLowerCase() === "ivascaremus@gmail.com") {
+                let subStatus = "Trial";
+                if(MY_EMAILS.includes(email.toLowerCase())) {
                     role = "manager";
+                    subStatus = "Lifetime Free";
                 }
 
-                // Salvare profil companie în Cloud Firestore
+                const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
+
                 await setDoc(doc(db, "users", user.uid), {
                     email: email,
                     companyName: compName,
                     role: role,
-                    createdAt: new Date().toISOString()
+                    subscriptionStatus: subStatus,
+                    clientLogo: "", 
+                    clientPhone: "",
+                    clientNotesHeader: "Professional Structured Infrastructure Report",
+                    createdAt: new Date().toISOString(),
+                    trialExpiresAt: Date.now() + thirtyDaysInMs
                 });
 
                 alert("Account created successfully!");
@@ -112,25 +146,62 @@
             }
         }
 
-        // Delogare
         async function handleLogout() {
             await signOut(auth);
             location.reload();
         }
 
-        // Drepturi de vizualizare (Manager vs Utilizator normal)
         function applyPermissions() {
             const managerSection = document.getElementById('managerSection');
+            const clientSettingsBtn = document.getElementById('clientSettingsBtn');
             
             if (currentUserData && currentUserData.role === 'manager') {
                 document.getElementById('companyDashboardTitle').innerText = "JUSTCABLES CRM (MANAGER)";
                 if (managerSection) managerSection.style.removeProperty('display');
+                if (clientSettingsBtn) clientSettingsBtn.style.display = 'none';
             } else {
                 if (managerSection) managerSection.style.display = 'none';
+                if (clientSettingsBtn) clientSettingsBtn.style.removeProperty('display');
             }
         }
 
-        // Salvare raport direct în Cloud Database
+        async function saveClientProfile() {
+            const name = document.getElementById('settingsCompanyName').value;
+            const phone = document.getElementById('settingsPhone').value;
+            const headerText = document.getElementById('settingsHeader').value;
+            const logoInput = document.getElementById('settingsLogoFile');
+
+            if(!name) return alert("Company Name is required!");
+
+            let logoBase64 = currentUserData.clientLogo || "";
+            if (logoInput.files && logoInput.files[0]) {
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    logoBase64 = e.target.result;
+                    await updateProfileInFirebase(name, phone, headerText, logoBase64);
+                };
+                reader.readAsDataURL(logoInput.files[0]);
+            } else {
+                await updateProfileInFirebase(name, phone, headerText, logoBase64);
+            }
+        }
+
+        async function updateProfileInFirebase(name, phone, headerText, logoData) {
+            try {
+                const userRef = doc(db, "users", currentUserData.uid);
+                await updateDoc(userRef, {
+                    companyName: name,
+                    clientPhone: phone,
+                    clientNotesHeader: headerText,
+                    clientLogo: logoData
+                });
+                alert("Profile settings saved successfully!");
+                location.reload();
+            } catch(e) {
+                alert("Error saving profile: " + e.message);
+            }
+        }
+
         async function saveDataOnline() {
             const biz = document.getElementById('bizName').value;
             const mail = document.getElementById('clientMail').value;
@@ -141,6 +212,7 @@
             const dataReport = {
                 uid: currentUserData.uid,
                 createdByCompany: currentUserData.companyName,
+                creatorEmail: currentUserData.email,
                 biz: biz,
                 mail: mail,
                 phone: document.getElementById('phone').value,
@@ -149,6 +221,7 @@
                 price: document.getElementById('totalPrice').value,
                 notes: document.getElementById('notes').value,
                 date: new Date().toLocaleString(),
+                timestamp: Date.now(), 
                 type: type,
                 sig: document.getElementById('sig-canvas').toDataURL()
             };
@@ -163,39 +236,241 @@
             }
         }
 
-        // Panou Centralizat de Control Manager (Tu vezi tot de la toți clienții)
-        async function loadManagerVault() {
-            if(currentUserData.role !== 'manager') return alert("Access denied!");
+        function setCloudFilter(filterName) {
+            currentCloudFilter = filterName;
+            loadManagerVault(); 
+        }
+
+        // CONTROL PLATFORMĂ SUB-REȚEA — LICENȚE & CONTURI (IZOLATĂ COMPLET)
+        async function showSubscriptionsOnly() {
+            currentCloudFilter = 'Subscriptions';
+            document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
+            document.getElementById('vaultSection').classList.remove('hidden');
             
             const listDiv = document.getElementById('managerVaultList');
-            listDiv.innerHTML = "Fetching global records from secure server...";
+            const surveyFilterContainer = document.getElementById('surveyFilterContainer');
+            
+            surveyFilterContainer.style.display = 'none';
+            document.getElementById('vaultNotificationBanner').style.display = 'none';
+            document.getElementById('vaultMainTitle').innerText = "Network Platform Control";
+            
+            listDiv.innerHTML = "<p style='text-align:center;'>Fetching secure network nodes...</p>"; 
+
+            try {
+                const usersSnapshot = await getDocs(collection(db, "users"));
+                listDiv.innerHTML = ""; 
+                const renderedEmails = new Set();
+
+                usersSnapshot.forEach((uDoc) => {
+                    const u = uDoc.data();
+                    const uId = uDoc.id;
+                    
+                    if (renderedEmails.has(u.email.toLowerCase())) return;
+                    renderedEmails.add(u.email.toLowerCase());
+
+                    let statusNote = "";
+                    if ((u.subscriptionStatus || 'Trial') === 'Trial' && u.trialExpiresAt) {
+                        const remainingMs = u.trialExpiresAt - Date.now();
+                        const remainingDays = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+                        statusNote = remainingDays > 0 ? ` (${remainingDays} days left)` : " (Expired)";
+                    }
+
+                    const uCard = document.createElement('div');
+                    uCard.className = 'record-card';
+                    uCard.style.borderLeftColor = u.subscriptionStatus === 'Suspended' ? '#ff4d4d' : '#28a745';
+                    uCard.innerHTML = `
+                        <h4>${u.companyName.toUpperCase()}</h4>
+                        <p><strong>Registered Email:</strong> ${u.email}</p>
+                        <p><strong>Created On:</strong> ${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}</p>
+                        <p><strong>Plan Status:</strong> <span style="color:var(--jc-yellow); font-weight:bold;">[${u.subscriptionStatus || 'Trial'}${statusNote}]</span></p>
+                        <div style="margin-top:12px; display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+                            <button onclick="updateUserSubscription('${uId}', 'Paid')" style="background:#28a745; padding:8px; font-size:0.65rem; margin:0; border-radius:5px; color:white;">Active / Paid</button>
+                            <button onclick="updateUserSubscription('${uId}', 'Lifetime Free')" style="background:#0056b3; padding:8px; font-size:0.65rem; margin:0; border-radius:5px; color:white;">Lifetime Free</button>
+                            <button onclick="addSubscriptionDays('${uId}')" style="background:#ecc94b; padding:8px; font-size:0.65rem; margin:0; border-radius:5px; color:black;">+30 Days Free</button>
+                            <button onclick="updateUserSubscription('${uId}', 'Suspended')" style="background:#dc3545; padding:8px; font-size:0.65rem; margin:0; border-radius:5px; color:white;">Suspend Acc</button>
+                        </div>
+                    `;
+                    listDiv.appendChild(uCard);
+                });
+            } catch(err) {
+                listDiv.innerHTML = "Error rendering tree: " + err.message;
+            }
+        }
+
+        // ÎNCĂRCARE GLOBALĂ CENTRALĂ DIRECTĂ — FILTRARE SURVEY-URI ȘI RAPOARTE TEHNICE
+        async function loadManagerVault() {
+            if (currentCloudFilter === 'Subscriptions') {
+                showSubscriptionsOnly();
+                return;
+            }
+
+            const listDiv = document.getElementById('managerVaultList');
+            const surveyFilterContainer = document.getElementById('surveyFilterContainer');
+            
+            surveyFilterContainer.style.removeProperty('display');
+            document.getElementById('vaultNotificationBanner').style.removeProperty('display');
+            document.getElementById('vaultMainTitle').innerText = "Central Database Node";
+            
+            listDiv.innerHTML = "<p style='text-align:center;'>Reading cloud documents...</p>"; 
+
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            if(document.getElementById(`v${currentCloudFilter}`)) {
+                document.getElementById(`v${currentCloudFilter}`).classList.add('active');
+            }
+
+            const purgeBtn = document.getElementById('cloudPurgeBtn');
+            if(purgeBtn) {
+                purgeBtn.style.display = (currentCloudFilter === 'Deleted' && currentUserData.role === 'manager') ? 'block' : 'none';
+            }
 
             try {
                 const querySnapshot = await getDocs(collection(db, "reports"));
-                listDiv.innerHTML = "";
-                
-                if (querySnapshot.empty) {
-                    listDiv.innerHTML = "<p style='text-align:center; color:#888;'>No records discovered in cloud network.</p>";
-                    return;
-                }
+                listDiv.innerHTML = ""; 
+                let counter = 0;
+                const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000); 
 
-                querySnapshot.forEach((doc) => {
-                    const r = doc.data();
+                querySnapshot.forEach((docSnap) => {
+                    const r = docSnap.data();
+                    const docId = docSnap.id;
+
+                    if (r.timestamp && r.timestamp < ninetyDaysAgo) {
+                        deleteDoc(doc(db, "reports", docId));
+                        return; 
+                    }
+
+                    const currentStatus = r.status || 'Ongoing';
+
+                    if (currentUserData.role !== 'manager' && r.uid !== currentUserData.uid) return;
+                    if (currentStatus !== currentCloudFilter) return;
+                    
+                    counter++;
+
                     const card = document.createElement('div');
                     card.className = 'record-card';
+                    
+                    if (currentStatus === 'Complete') card.style.borderLeftColor = '#28a745';
+                    if (currentStatus === 'Invalid') card.style.borderLeftColor = '#ecc94b';
+                    if (currentStatus === 'Deleted') card.style.borderLeftColor = '#ff4d4d';
+
                     card.innerHTML = `
+                        <div class="dropdown-container">
+                            <button class="dropdown-btn" onclick="toggleCloudMenu(event, '${docId}')">Actions ▾</button>
+                            <div id="drop-${docId}" class="dropdown-content">
+                                <button onclick="event.stopPropagation(); downloadCloudPDF('${docId}', ${JSON.stringify(r).replace(/"/g, '&quot;')})">📥 Download PDF</button>
+                                <button onclick="event.stopPropagation(); resendCloudEmail(${JSON.stringify(r).replace(/"/g, '&quot;')})">📩 Resend Email</button>
+                                
+                                <div style="background: rgba(0,0,0,0.4); padding: 5px; border-top: 1px solid rgba(236,201,75,0.2); margin-top: 5px;" onclick="event.stopPropagation();">
+                                    <span style="font-size: 0.65rem; color: var(--jc-yellow); display: block; padding: 2px 5px; font-weight: bold; text-transform: uppercase;">Move to:</span>
+                                    ${currentCloudFilter !== 'Ongoing' ? `<button onclick="updateCloudStatus('${docId}', 'Ongoing')" style="padding: 5px 10px; font-size: 0.7rem; border: none; color:#fff; width:100%; text-align:left; background:transparent;">🔄 Ongoing</button>` : ''}
+                                    ${currentCloudFilter !== 'Complete' ? `<button onclick="updateCloudStatus('${docId}', 'Complete')" style="padding: 5px 10px; font-size: 0.7rem; border: none; color: #28a745; width:100%; text-align:left; background:transparent;">✅ Complete</button>` : ''}
+                                    ${currentCloudFilter !== 'Invalid' ? `<button onclick="updateCloudStatus('${docId}', 'Invalid')" style="padding: 5px 10px; font-size: 0.7rem; border: none; color: #ecc94b; width:100%; text-align:left; background:transparent;">⚠️ Invalid</button>` : ''}
+                                    ${currentCloudFilter !== 'Deleted' ? `<button onclick="updateCloudStatus('${docId}', 'Deleted')" style="padding: 5px 10px; font-size: 0.7rem; border: none; color: #ff4d4d; width:100%; text-align:left; background:transparent;">🗑️ Delete</button>` : ''}
+                                </div>
+                            </div>
+                        </div>
+
                         <h4>${r.biz}</h4>
-                        <p><strong>CREATOR COMPANY:</strong> ${r.createdByCompany.toUpperCase()}</p>
+                        <p><strong>COMPANY CONTAINER:</strong> ${r.createdByCompany.toUpperCase()}</p>
                         <p><strong>Contact:</strong> ${r.contact || 'N/A'} | <strong>Phone:</strong> ${r.phone || 'N/A'}</p>
                         <p><strong>Email:</strong> ${r.mail} | <strong>Date:</strong> ${r.date}</p>
-                        <p><strong>Total Amount:</strong> €${r.price || '0'} [${r.status}]</p>
+                        <p><strong>Valuation:</strong> €${r.price || '0'} <span style="color:var(--jc-yellow); font-weight:bold;">[${currentStatus.toUpperCase()}]</span></p>
                         <p style="font-size: 0.75rem; color: #ccc; margin-top: 5px; background: rgba(0,0,0,0.2); padding: 5px; border-radius:4px;"><strong>Notes:</strong> ${r.notes}</p>
                     `;
                     listDiv.appendChild(card);
                 });
+
+                if (counter === 0) {
+                    listDiv.innerHTML = `<p style='text-align:center; color:#888; margin-top:20px;'>No records found in the [${currentCloudFilter}] container.</p>`;
+                }
+
             } catch (err) {
-                listDiv.innerHTML = "Download failure: " + err.message;
+                listDiv.innerHTML = "Sync Error: " + err.message;
             }
+        }
+
+        // SCHIMBARE LICENȚE DIRECTĂ — RĂMÂNE FIXAT PE ECRANUL DE SUBSCRIPȚII DUPĂ SALVARE
+        async function updateUserSubscription(userId, status) {
+            try {
+                await updateDoc(doc(db, "users", userId), { subscriptionStatus: status });
+                alert(`Account subscription status changed to: ${status}`);
+                showSubscriptionsOnly(); 
+            } catch(e) {
+                alert("Failed: " + e.message);
+            }
+        }
+
+        async function addSubscriptionDays(userId) {
+            try {
+                const userRef = doc(db, "users", userId);
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    const uData = userSnap.data();
+                    let baseTime = uData.trialExpiresAt && uData.trialExpiresAt > Date.now() ? uData.trialExpiresAt : Date.now();
+                    const newExpiry = baseTime + (30 * 24 * 60 * 60 * 1000);
+                    
+                    await updateDoc(userRef, { 
+                        subscriptionStatus: 'Trial',
+                        trialExpiresAt: newExpiry 
+                    });
+                    alert("Added 30 extra trial days to this container.");
+                    showSubscriptionsOnly();
+                }
+            } catch(e) {
+                alert("Failed: " + e.message);
+            }
+        }
+
+        async function purgeAllDeletedDocuments() {
+            if(!confirm("Are you absolutely sure you want to PERMANENTLY DELETE all files in this folder?")) return;
+
+            try {
+                const querySnapshot = await getDocs(collection(db, "reports"));
+                let deletePromises = [];
+
+                querySnapshot.forEach((docSnap) => {
+                    if(docSnap.data().status === 'Deleted') {
+                        deletePromises.push(deleteDoc(doc(db, "reports", docSnap.id))); 
+                    }
+                });
+
+                await Promise.all(deletePromises);
+                alert("Cloud Storage space reclaimed successfully!");
+                loadManagerVault(); 
+            } catch (err) {
+                alert("Purge failed: " + err.message);
+            }
+        }
+
+        function toggleCloudMenu(e, id) {
+            e.stopPropagation();
+            document.querySelectorAll('.dropdown-content').forEach(el => {
+                if(el.id !== `drop-${id}`) el.classList.remove('show-menu');
+            });
+            document.getElementById(`drop-${id}`).classList.toggle('show-menu');
+        }
+
+        window.addEventListener('click', function() {
+            document.querySelectorAll('.dropdown-content').forEach(el => el.classList.remove('show-menu'));
+        });
+
+        async function updateCloudStatus(docId, newStatus) {
+            try {
+                await updateDoc(doc(db, "reports", docId), { status: newStatus });
+                alert(`Status updated successfully to: ${newStatus}`);
+                loadManagerVault(); 
+            } catch (err) {
+                alert("Failed to update status: " + err.message);
+            }
+        }
+
+        function downloadCloudPDF(id, data) {
+            if(typeof generatePDF === 'function') generatePDF(data);
+        }
+
+        function resendCloudEmail(r) {
+            const subject = encodeURIComponent(`[Copy Report] ${r.type} - ${r.biz}`);
+            const body = encodeURIComponent(`Find attached your report generated by ${r.createdByCompany.toUpperCase()}.`);
+            window.location.href = `mailto:${r.mail}?cc=justcables.support@gmail.com&subject=${subject}&body=${body}`;
         }
     </script>
 
@@ -212,11 +487,21 @@
         input, select, textarea { width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: none; background: rgba(255, 255, 255, 0.9); color: #222; box-sizing: border-box; font-weight: 600; }
         button { width: 100%; padding: 14px; margin-top: 15px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.3s; }
         .btn-main { background-color: var(--jc-yellow); color: #000; letter-spacing: 1px; }
-        .record-card { background: rgba(255,255,255,0.06); padding: 15px; border-radius: 10px; margin-bottom: 12px; border-left: 5px solid var(--jc-yellow); text-align: left; }
+        .record-card { background: rgba(255,255,255,0.06); padding: 15px; border-radius: 10px; margin-bottom: 12px; border-left: 5px solid var(--jc-yellow); text-align: left; position: relative; }
         .record-card h4 { margin: 0 0 5px 0; color: var(--jc-yellow); font-size: 1rem; }
         .record-card p { margin: 3px 0; font-size: 0.8rem; color: #ddd; }
         canvas { background: white; border-radius: 8px; margin-top: 10px; width: 100%; height: 150px; touch-action: none; }
         footer { text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,0,0,0.8); border-top: 1px solid var(--jc-yellow); font-size: 12px; }
+        
+        .tab-btn { padding: 12px; text-align: center; background: rgba(255,255,255,0.08); border-radius: 8px; cursor: pointer; font-size: 0.65rem; font-weight: bold; transition: 0.2s; }
+        .tab-btn.active { background: var(--jc-yellow) !important; color: #000 !important; }
+
+        .dropdown-container { position: absolute; right: 15px; top: 15px; }
+        .dropdown-btn { background: #333; color: var(--jc-yellow); border: 1px solid var(--jc-yellow); padding: 5px 10px; border-radius: 5px; font-size: 0.75rem; cursor: pointer; font-weight: bold; }
+        .dropdown-content { display: none; position: absolute; right: 0; background: #1a2636; min-width: 175px; box-shadow: 0px 8px 16px rgba(0,0,0,0.5); z-index: 10; border-radius: 6px; border: 1px solid rgba(236, 201, 75, 0.4); overflow: hidden; }
+        .dropdown-content button { width: 100%; padding: 10px; margin: 0; text-align: left; background: transparent; color: white; font-size: 0.75rem; border: none; border-bottom: 1px solid rgba(255,255,255,0.05); border-radius: 0; }
+        .dropdown-content button:hover { background: var(--jc-yellow) !important; color: black !important; }
+        .show-menu { display: block !important; }
     </style>
 </head>
 <body>
@@ -225,6 +510,15 @@
         <source src="background.mp4" type="video/mp4">
     </video>
 
+    <div id="expiredSection" class="app-container hidden" style="border-color:#ff4d4d; text-align:center;">
+        <h2 style="color:#ff4d4d; letter-spacing:1px;">⚠️ TRIAL EXPIRED</h2>
+        <p style="font-size:0.9rem; line-height:1.6; margin-top:15px; color:#ddd;">
+            Your 30-day trial period has ended. To renew your subscription, update your business features or request an active deployment plan, please contact <strong>JustCables Cloud Management</strong>.
+        </p>
+        <p style="color:var(--jc-yellow); font-weight:bold; margin-top:20px; font-size:0.9rem;">justcables.support@gmail.com</p>
+        <button class="btn-main" style="background:#444; color:#fff;" onclick="handleLogout()">Exit Application</button>
+    </div>
+
     <div id="loginSection" class="app-container">
         <img src="icon.png" style="width: 100px; display: block; margin: 0 auto 10px;">
         <h2 style="text-align:center; color:var(--jc-yellow); letter-spacing: 2px;">SECURE ACCESS</h2>
@@ -232,10 +526,8 @@
         <div id="authLoginFields">
             <label>Email Address</label>
             <input type="email" id="loginEmail" placeholder="manager@company.com">
-            
             <label>Password</label>
             <input type="password" id="loginPassword" placeholder="••••••••">
-            
             <button class="btn-main" onclick="handleLogin()">Sign In</button>
             <p style="text-align:center; font-size:0.8rem; margin-top:15px; cursor:pointer; color:var(--jc-yellow);" onclick="toggleAuthScreens()">Don't have an account? Register here</p>
             <div id="loginError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold;"></div>
@@ -243,16 +535,12 @@
 
         <div id="authRegisterFields" class="hidden">
             <h3 style="text-align: center; color: var(--jc-yellow); font-size:1rem;">CREATE BUSINESS CONTAINER</h3>
-            
-            <label>Company/Personal Display Name *</label>
-            <input type="text" id="regCompanyName" placeholder="e.g. JustCables.ie ">
-
+            <label>Company Display Name *</label>
+            <input type="text" id="regCompanyName" placeholder="e.g. JustCables.ie">
             <label>Email Address *</label>
             <input type="email" id="regEmail" placeholder="yourname@domain.com">
-            
             <label>Password *</label>
             <input type="password" id="regPassword" placeholder="Minimum 6 characters">
-            
             <button class="btn-main" style="background-color: #28a745; color: white;" onclick="handleRegister()">Create Account</button>
             <p style="text-align:center; font-size:0.8rem; margin-top:15px; cursor:pointer; color: #fff;" onclick="toggleAuthScreens()">Cancel and go back</p>
             <div id="regError" style="color:#ff4d4d; text-align:center; margin-top:10px; display:none; font-weight:bold;"></div>
@@ -265,18 +553,35 @@
         <button class="btn-main" onclick="openForm('Site Survey')">New Site Survey</button>
         <button class="btn-main" onclick="openForm('Job Sheet')">New Job Sheet</button>
         <button class="btn-main" onclick="openForm('Maintenance')">New Maintenance</button>
+        <button class="btn-main" style="background:#555; color:#fff;" onclick="showVault()">Open Records Vault</button>
         
+        <button id="clientSettingsBtn" style="background:transparent; color:var(--jc-yellow); border:1px dashed var(--jc-yellow);" onclick="openSettings()">⚙️ Custom Profile & Logo Settings</button>
+
         <div id="managerSection" style="display:none; margin-top:20px; border-top:1px dashed var(--jc-yellow); padding-top:15px;">
-            <h3 style="color:var(--jc-yellow); text-align:center; font-size:0.9rem;">🛡️ APP MANAGER HUB</h3>
-            <button style="background:#0056b3; color:white;" onclick="showVault()">Open Global Records Vault</button>
+            <h3 style="color:var(--jc-yellow); text-align:center; font-size:0.8rem;">🛡️ ADMINISTRATOR PLATFORM ACCESS</h3>
+            <button style="background:#0056b3; color:white; margin-top:5px;" onclick="showSubscriptionsOnly();">👥 Manage User Subscriptions</button>
         </div>
 
         <button style="background:transparent; color:white; border:1px solid #666; margin-top:20px;" onclick="handleLogout()">Logout</button>
     </div>
 
+    <div id="settingsSection" class="app-container hidden">
+        <h2 style="text-align:center; color:var(--jc-yellow);">Profile Customization</h2>
+        <label>Your Company Name</label>
+        <input type="text" id="settingsCompanyName">
+        <label>Contact Phone Number</label>
+        <input type="text" id="settingsPhone">
+        <label>PDF Sub-Header Slogan</label>
+        <input type="text" id="settingsHeader">
+        <label>Upload Your Company Logo (.png / .jpg)</label>
+        <input type="file" id="settingsLogoFile" accept="image/*" style="background:#fff; color:#000; padding:10px; border-radius:5px; margin-top:5px; width:100%;">
+        
+        <button class="btn-main" onclick="saveClientProfile()">Save Changes</button>
+        <button style="background:transparent; border:1px solid #fff; color:#fff; margin-top:10px;" onclick="showDashboard()">Back</button>
+    </div>
+
     <div id="formSection" class="app-container hidden">
         <h2 id="formTitle" style="text-align:center; color:var(--jc-yellow);">FORM</h2>
-        
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
             <div><label>Business Name *</label><input type="text" id="bizName"></div>
             <div><label>Client Email *</label><input type="email" id="clientMail"></div>
@@ -295,23 +600,33 @@
             </div>
             <div><label>Final Price (€)</label><input type="number" id="totalPrice"></div>
         </div>
-        
         <label>Technical Notes</label>
         <textarea id="notes" rows="4"></textarea>
-        
         <label>Customer Signature</label>
         <canvas id="sig-canvas"></canvas>
         <button type="button" style="background:#333; color:var(--jc-yellow); font-size:0.7rem; padding:8px; margin-top:5px; border:1px solid var(--jc-yellow);" onclick="clearSignature()">Clear Signature</button>
-
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:15px;">
-            <button class="btn-main" onclick="saveDataOnline()">Save & Cloud Sync</button>
+            <button class="btn-main" onclick="saveDataOnline()">Save & Export</button>
             <button style="background:transparent; border:1px solid white; color:white;" onclick="showDashboard()">Back</button>
         </div>
     </div>
 
     <div id="vaultSection" class="app-container hidden">
-        <h2 style="text-align:center; color:var(--jc-yellow); margin-bottom:15px;">Central Database Node</h2>
+        <h2 id="vaultMainTitle" style="text-align:center; color:var(--jc-yellow); margin-bottom:10px;">Central Database Node</h2>
+        
+        <div id="vaultNotificationBanner" style="background:rgba(236, 201, 75, 0.1); border:1px solid var(--jc-yellow); border-radius:8px; padding:12px; font-size:0.75rem; text-align:center; line-height:1.4; color:#fff; margin-bottom:15px;">
+            "Please purge all the surveys that will be more than 30 days or save them on your local storage, thank you : <strong>JustCables</strong>. Surveys more than 90 days will be automatically purged."
+        </div>
+
+        <div id="surveyFilterContainer" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 15px;">
+            <div id="vOngoing" class="tab-btn active" onclick="setCloudFilter('Ongoing')">🔄 ONGOING</div>
+            <div id="vComplete" class="tab-btn" style="color:#28a745;" onclick="setCloudFilter('Complete')">✅ COMPLETE</div>
+            <div id="vInvalid" class="tab-btn" style="color:#ecc94b;" onclick="setCloudFilter('Invalid')">⚠️ INVALID</div>
+            <div id="vDeleted" class="tab-btn" style="color:#ff4d4d;" onclick="setCloudFilter('Deleted')">🗑️ DELETED</div>
+        </div>
+
         <div id="managerVaultList" style="max-height: 400px; overflow-y: auto; margin-bottom:15px; padding-right:5px;"></div>
+        <button id="cloudPurgeBtn" style="background:#dc3545; color:white; display:none; margin-bottom:10px; font-weight:bold;" onclick="purgeAllDeletedDocuments()">☢️ PURGE ALL DELETED FROM CLOUD</button>
         <button class="btn-main" onclick="showDashboard()">Back to Dashboard</button>
     </div>
 
@@ -336,21 +651,30 @@
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('formSection').classList.remove('hidden');
             document.getElementById('formTitle').innerText = t;
-            
             document.getElementById('bizName').value = '';
             document.getElementById('clientMail').value = '';
             document.getElementById('contactName').value = '';
             document.getElementById('phone').value = '';
             document.getElementById('totalPrice').value = '';
             document.getElementById('notes').value = '';
-            
             initCanvas();
         }
 
         function showVault() {
             document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
             document.getElementById('vaultSection').classList.remove('hidden');
+            
+            // RESETĂM IMPLICIT BUFFERUL PE ONGOING RAPOARTE LA INTRAREA DIN DASHBOARD
+            currentCloudFilter = 'Ongoing';
             loadManagerVault();
+        }
+
+        function openSettings() {
+            document.querySelectorAll('.app-container').forEach(c => c.classList.add('hidden'));
+            document.getElementById('settingsSection').classList.remove('hidden');
+            document.getElementById('settingsCompanyName').value = currentUserData.companyName || "";
+            document.getElementById('settingsPhone').value = currentUserData.clientPhone || "";
+            document.getElementById('settingsHeader').value = currentUserData.clientNotesHeader || "";
         }
 
         function initCanvas() {
@@ -369,7 +693,6 @@
 
         function clearSignature() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
 
-        // GENERARE PDF CU COMPANIE CREATOARE METADATA DINAMICĂ
         function generatePDF(d) {
             const doc = new jspdf.jsPDF();
             const pageHeight = doc.internal.pageSize.height;
@@ -378,23 +701,54 @@
             doc.setFillColor(27, 46, 75); 
             doc.rect(0, 0, 210, yCursor, 'F');
 
-            let activeCompanyTitle = d.createdByCompany ? d.createdByCompany.toUpperCase() : "JUSTCABLES";
-            
-            doc.setTextColor(236, 201, 75); 
-            doc.setFontSize(22);
-            doc.text(activeCompanyTitle, 20, 32);
-            doc.setFontSize(10);
-            doc.text("Professional Structured Infrastructure Report", 20, 41);
+            const isManager = ["ivascaremus@gmail.com", "justcables.support@gmail.com", "justcables@outlook.com", "remusivasca@outlook.com"].includes(d.creatorEmail ? d.creatorEmail.toLowerCase() : "");
+
+            if (isManager) {
+                doc.setTextColor(236, 201, 75); 
+                doc.setFontSize(24);
+                doc.text("JUSTCABLES", 20, 28);
+                doc.setFontSize(10);
+                doc.text("Expert in cabling", 20, 36);
+
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(8.5);
+                doc.text("Remus Ivasca | Lead Engineer", 130, 22);
+                doc.text("Phone: 00353 858130081", 130, 27);
+                doc.text("Email: justcables.support@gmail.com", 130, 32);
+                doc.text("Web: www.justcables.support", 130, 37);
+                doc.text("Dublin | Ireland", 130, 42);
+                
+                try { doc.addImage('icon.png', 'PNG', 20, 40, 10, 10); } catch(e){}
+            } else {
+                let clientTitle = d.createdByCompany ? d.createdByCompany.toUpperCase() : "SUBCONTRACTOR";
+                doc.setTextColor(236, 201, 75); 
+                doc.setFontSize(22);
+                doc.text(clientTitle, 20, 30);
+                
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(9);
+                doc.text(currentUserData.clientNotesHeader || "Professional Infrastructure Report", 20, 38);
+                if(currentUserData.clientPhone) doc.text(`Phone: ${currentUserData.clientPhone}`, 140, 30);
+                doc.text(`Email: ${currentUserData.email}`, 140, 36);
+
+                if (currentUserData.clientLogo) {
+                    try { doc.addImage(currentUserData.clientLogo, 'PNG', 140, 10, 25, 15); } catch(e){}
+                }
+            }
 
             doc.setTextColor(0, 0, 0);
-            doc.setFontSize(16);
+            doc.setFontSize(15);
             yCursor += 15;
             doc.text(`${d.type.toUpperCase()}`, 20, yCursor);
+
+            doc.setDrawColor(236, 201, 75);
+            doc.line(20, yCursor + 3, 190, yCursor + 3);
 
             doc.setFontSize(11);
             yCursor += 15;
             doc.text(`BUSINESS SITE: ${d.biz}`, 20, yCursor);
             doc.text(`DATE: ${d.date}`, 130, yCursor);
+            if(d.contact) { yCursor += 7; doc.text(`CONTACT PERSON: ${d.contact}`, 20, yCursor); }
 
             yCursor += 15;
             doc.setFontSize(12);
@@ -402,26 +756,27 @@
             
             doc.setFontSize(10);
             yCursor += 10;
-            const splitNotes = doc.splitTextToSize(d.notes || "No notes.", 170);
+            const splitNotes = doc.splitTextToSize(d.notes || "No extra technical information declared.", 170);
             splitNotes.forEach((line) => {
                 if (yCursor + 7 > pageHeight - 25) { doc.addPage(); yCursor = 25; }
                 doc.text(line, 20, yCursor);
                 yCursor += 6;
             });
 
-            yCursor += 10;
-            doc.setFontSize(14);
-            doc.text(`TOTAL PROJECT VALUATION: €${d.price}`, 20, yCursor);
+            yCursor += 12;
+            if (yCursor + 20 > pageHeight - 25) { doc.addPage(); yCursor = 25; }
+            doc.setFontSize(13);
+            doc.text(`TOTAL PROJECT VALUATION: €${d.price || '0'}`, 20, yCursor);
 
             if(d.sig) {
-                yCursor += 15;
-                if (yCursor + 25 > pageHeight - 25) { doc.addPage(); yCursor = 25; }
+                yCursor += 12;
+                if (yCursor + 30 > pageHeight - 25) { doc.addPage(); yCursor = 25; }
                 doc.setFontSize(10);
                 doc.text("Customer Signature Authorization:", 20, yCursor);
-                doc.addImage(d.sig, 'PNG', 20, yCursor + 5, 50, 20);
+                doc.addImage(d.sig, 'PNG', 20, yCursor + 4, 50, 20);
             }
 
-            doc.save(`${d.biz}_InfrastructureReport.pdf`);
+            doc.save(`${d.biz}_NetworkReport.pdf`);
         }
     </script>
 </body>
